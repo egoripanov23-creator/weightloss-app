@@ -28,8 +28,8 @@ MINI_APP_URL = "https://egoripanov23-creator.github.io/weightloss-app/"
 SITE_URL = "https://egoripanov23-creator.github.io/weightloss-app/"
 TICKETS_FILE = os.path.join(os.path.dirname(__file__), "tickets.json")
 
-# Admin IDs (manager). Add your Telegram ID here to receive/reply tickets.
-ADMIN_IDS = {123456789}  # <-- replace with your Telegram ID
+# Admin IDs (manager) — ticket notifications are sent here.
+ADMIN_IDS = {5781304476}  # ваш Telegram ID (менеджер тикетов)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("weightloss-bot")
