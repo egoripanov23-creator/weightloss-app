@@ -63,7 +63,7 @@ const state = {
 
 // ---------- Navigation links ----------
 const TELEGRAM_URL = "https://t.me/foodAi1_bot";
-const SITE_URL = "https://egoripanov23-creator.github.io/weightloss-app/";
+const SITE_URL = "https://aifoodbot.duckdns.org/";
 
 // ---------- Telegram Cloud Storage helpers ----------
 // Check if running inside actual Telegram (not browser)

@@ -24,8 +24,8 @@ from aiogram.types import (
 )
 
 BOT_TOKEN = "REDACTED_BOT_TOKEN"
-MINI_APP_URL = "https://egoripanov23-creator.github.io/weightloss-app/"
-SITE_URL = "https://egoripanov23-creator.github.io/weightloss-app/"
+MINI_APP_URL = "https://aifoodbot.duckdns.org/"
+SITE_URL = "https://aifoodbot.duckdns.org/"
 TICKETS_FILE = os.path.join(os.path.dirname(__file__), "tickets.json")
 
 # Admin IDs (manager) — ticket notifications are sent here.

@@ -33,7 +33,7 @@ python main.py
 ```
 
 ### Mini App / сайт
-- Сайт: https://egoripanov23-creator.github.io/weightloss-app/
+- Сайт: https://aifoodbot.duckdns.org/
 - Бот: https://t.me/foodAi1_bot
 - Локально: `cd miniapp && python -m http.server 8080`
 
