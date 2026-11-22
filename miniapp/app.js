@@ -3,9 +3,16 @@
 // ============================================================
 
 // ---------- Configuration ----------
-const AI_BASE_URL = "https://api.baza-ai.org/v1";
-const AI_API_KEY = "REDACTED_AI_KEY";
-const AI_MODEL = "gpt-6.1-terra";
+// AI Provider: Gemini (supports CORS from browser, free tier)
+// Get free API key: https://aistudio.google.com/apikey
+const GEMINI_MODEL = "gemini-2.0-flash";
+const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta";
+
+// Fallback: kakistore (requires proxy for CORS)
+const KAKISTORE_BASE_URL = "https://api.baza-ai.org/v1";
+const KAKISTORE_API_KEY = "REDACTED_AI_KEY";
+const KAKISTORE_MODEL = "gpt-6.1-terra";
+const PROXY_URL = "http://localhost:8080/ai";
 
 // ---------- Telegram WebApp ----------
 const tg = window.Telegram?.WebApp;
@@ -69,50 +76,62 @@ async function storageSet(key, value) {
 }
 
 // ---------- AI API ----------
-// Proxy URL (local backend) - change to your server URL
-const PROXY_URL = "http://localhost:8080/ai";
-
 async function aiChat(messages, temperature = 0.7, retries = 2) {
-  // Try proxy first (avoids CORS), then direct API
-  const endpoints = [PROXY_URL, `${AI_BASE_URL}/chat/completions`];
+  // Try Gemini first (supports CORS from browser, free tier)
+  const geminiKey = state.settings?.geminiKey || localStorage.getItem("gemini_api_key") || "";
   
-  for (const endpoint of endpoints) {
+  if (geminiKey) {
     for (let attempt = 0; attempt <= retries; attempt++) {
       try {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 30000);
         
-        const headers = { "Content-Type": "application/json" };
-        if (endpoint === `${AI_BASE_URL}/chat/completions`) {
-          headers["Authorization"] = `Bearer ${AI_API_KEY}`;
+        // Convert OpenAI messages format to Gemini format
+        const systemMsg = messages.find(m => m.role === "system");
+        const userMsgs = messages.filter(m => m.role !== "system");
+        const geminiContents = userMsgs.map(m => ({
+          role: m.role === "assistant" ? "model" : "user",
+          parts: [{ text: m.content }]
+        }));
+        
+        const body = {
+          contents: geminiContents,
+          generationConfig: {
+            temperature: temperature,
+            maxOutputTokens: 2000,
+          }
+        };
+        
+        if (systemMsg) {
+          body.systemInstruction = { parts: [{ text: systemMsg.content }] };
         }
         
-        const res = await fetch(endpoint, {
+        const res = await fetch(`${GEMINI_BASE_URL}/models/${GEMINI_MODEL}:generateContent?key=${geminiKey}`, {
           method: "POST",
-          headers: headers,
-          body: JSON.stringify({
-            model: AI_MODEL,
-            messages: messages,
-            temperature: temperature,
-            max_tokens: 2000,
-          }),
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
           signal: controller.signal,
         });
         clearTimeout(timeout);
         
         if (!res.ok) {
+          const errText = await res.text().catch(() => "");
+          console.error(`Gemini error ${res.status}:`, errText);
+          if (res.status === 400 && errText.includes("API_KEY_INVALID")) {
+            return null;
+          }
           if (attempt < retries) {
             await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
             continue;
           }
-          break; // Try next endpoint
+          break;
         }
         const data = await res.json();
-        const content = data.choices?.[0]?.message?.content || "";
-        if (content) return content;
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+        if (text) return text;
         break;
       } catch (err) {
-        console.error(`AI error (${endpoint}):`, err);
+        console.error("Gemini error:", err);
         if (attempt < retries) {
           await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
           continue;
@@ -121,6 +140,47 @@ async function aiChat(messages, temperature = 0.7, retries = 2) {
       }
     }
   }
+  
+  // Fallback: try kakistore through proxy
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 30000);
+      
+      const res = await fetch(PROXY_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: KAKISTORE_MODEL,
+          messages: messages,
+          temperature: temperature,
+          max_tokens: 2000,
+        }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+      
+      if (!res.ok) {
+        if (attempt < retries) {
+          await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+          continue;
+        }
+        break;
+      }
+      const data = await res.json();
+      const content = data.choices?.[0]?.message?.content || "";
+      if (content) return content;
+      break;
+    } catch (err) {
+      console.error(`Proxy error:`, err);
+      if (attempt < retries) {
+        await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+        continue;
+      }
+      break;
+    }
+  }
+  
   return null;
 }
 
@@ -586,6 +646,14 @@ function renderSettings() {
         </div>
       </div>
 
+      <div class="form-group">
+        <label class="form-label">🔑 API ключ Google Gemini (бесплатно)</label>
+        <p style="font-size: 0.75rem; color: var(--muted); margin-bottom: 8px;">
+          Получите бесплатный ключ на <a href="https://aistudio.google.com/apikey" target="_blank" style="color: var(--accent);">aistudio.google.com/apikey</a>
+        </p>
+        <input type="text" class="form-input" id="set-gemini-key" placeholder="AIzaSy..." value="${s.geminiKey || localStorage.getItem("gemini_api_key") || ""}">
+      </div>
+
       <button class="btn btn-primary btn-block" id="btn-save-start">💾 Сохранить и начать</button>
     </div>
   `;
@@ -620,11 +688,17 @@ function renderSettings() {
     const products = [...document.querySelectorAll("#products-grid .widget.selected")].map(w => w.dataset.product);
     const allergies = [...document.querySelectorAll("#allergies-grid .allergy-tag.selected")].map(t => t.dataset.allergy);
     const diff = document.querySelector("#difficulty-grid .difficulty-option.selected")?.dataset.difficulty || "medium";
+    const geminiKey = document.getElementById("set-gemini-key").value.trim();
 
     state.settings = {
       weight, height, age, targetWeight, weeks, products, allergies, difficulty: diff,
+      geminiKey: geminiKey,
       createdAt: new Date().toISOString(),
     };
+    
+    if (geminiKey) {
+      localStorage.setItem("gemini_api_key", geminiKey);
+    }
     await storageSet("settings", state.settings);
     
     // Save initial weight
@@ -782,16 +856,29 @@ function renderMealPlanLoading() {
 
 function renderMealPlanError() {
   const el = document.getElementById("screen-mealplan");
+  const hasKey = state.settings?.geminiKey || localStorage.getItem("gemini_api_key");
   el.innerHTML = `
     <div class="glass animate-in" style="max-width: 480px; margin: 0 auto; text-align: center;">
       <div style="font-size: 3rem; margin-bottom: 16px;">😕</div>
       <h2>Не удалось составить план</h2>
-      <p style="margin-bottom: 12px;">Возможные причины:</p>
-      <ul style="text-align: left; color: var(--muted); font-size: 0.85rem; margin-bottom: 20px; padding-left: 20px;">
-        <li>Нет подключения к интернету</li>
-        <li>AI-сервер временно недоступен</li>
-        <li>Проблема с CORS (попробуйте открыть в браузере)</li>
-      </ul>
+      ${!hasKey ? `
+        <p style="margin-bottom: 16px; color: var(--accent); font-weight: 600;">⚠️ Не указан API ключ Gemini</p>
+        <p style="margin-bottom: 12px; font-size: 0.85rem; color: var(--muted);">Для работы ИИ нужен бесплатный ключ Google Gemini:</p>
+        <ol style="text-align: left; color: var(--muted); font-size: 0.8rem; margin-bottom: 20px; padding-left: 20px;">
+          <li>Откройте <a href="https://aistudio.google.com/apikey" target="_blank" style="color: var(--accent);">aistudio.google.com/apikey</a></li>
+          <li>Войдите через Google аккаунт</li>
+          <li>Нажмите "Create API Key"</li>
+          <li>Скопируйте ключ и вставьте в настройки</li>
+        </ol>
+        <button class="btn btn-primary btn-block" id="btn-go-settings" style="margin-bottom: 10px;">⚙️ Открыть настройки</button>
+      ` : `
+        <p style="margin-bottom: 12px;">Возможные причины:</p>
+        <ul style="text-align: left; color: var(--muted); font-size: 0.85rem; margin-bottom: 20px; padding-left: 20px;">
+          <li>Неверный API ключ</li>
+          <li>Нет подключения к интернету</li>
+          <li>AI-сервер временно недоступен</li>
+        </ul>
+      `}
       <div style="display: flex; gap: 10px;">
         <button class="btn btn-primary" style="flex: 1;" id="btn-retry">🔄 Попробовать снова</button>
         <button class="btn btn-ghost" style="flex: 1;" id="btn-demo-plan">📋 Демо-план</button>
@@ -803,6 +890,13 @@ function renderMealPlanError() {
     state.mealPlan = getDemoMealPlan();
     renderMealPlan();
   });
+  const goSettings = document.getElementById("btn-go-settings");
+  if (goSettings) {
+    goSettings.addEventListener("click", () => {
+      renderSettings();
+      showScreen("settings");
+    });
+  }
 }
 
 function getDemoMealPlan() {
@@ -1017,6 +1111,11 @@ async function init() {
   const agreed = await storageGet("agreed");
   state.user = await storageGet("user");
   state.settings = await storageGet("settings");
+  // Sync gemini key from localStorage
+  if (state.settings && !state.settings.geminiKey) {
+    const savedKey = localStorage.getItem("gemini_api_key");
+    if (savedKey) state.settings.geminiKey = savedKey;
+  }
   state.mealPlan = await storageGet("mealPlan");
   state.weightHistory = (await storageGet("weightHistory")) || [];
 
