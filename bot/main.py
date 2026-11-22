@@ -60,6 +60,10 @@ class TicketStates(StatesGroup):
     waiting_message = State()
 
 
+class RegStates(StatesGroup):
+    waiting_contact = State()
+
+
 # ---------- Keyboards ----------
 def app_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[
@@ -89,7 +93,28 @@ def manager_keyboard():
 
 # ---------- Commands ----------
 @dp.message(CommandStart())
-async def cmd_start(message):
+async def cmd_start(message, state: FSMContext):
+    # Registration deep-link: /start reg_<token>
+    args = ""
+    if message.text and len(message.text.split(maxsplit=1)) > 1:
+        args = message.text.split(maxsplit=1)[1].strip()
+    if args.startswith("reg_"):
+        token = args[4:]
+        await state.update_data(reg_token=token)
+        await state.set_state(RegStates.waiting_contact)
+        kb = ReplyKeyboardMarkup(
+            keyboard=[[KeyboardButton(text="📱 Подтвердить номер", request_contact=True)]],
+            resize_keyboard=True,
+            one_time_keyboard=True,
+        )
+        await message.answer(
+            "👋 Добро пожаловать в <b>AI WeightLoss</b>!\n\n"
+            "Чтобы продолжить регистрацию на сайте, подтвердите ваш номер телефона — "
+            "нажмите кнопку ниже 👇",
+            reply_markup=kb,
+        )
+        return
+
     await message.answer(
         "🥗 <b>AI WeightLoss</b>\n\n"
         "Персональный AI-помощник для похудения:\n"
@@ -259,6 +284,38 @@ async def ticket_message(message, state: FSMContext):
             )
         except Exception as e:
             logger.error(f"Failed to notify admin {admin_id}: {e}")
+
+
+# ---------- Registration via deep-link ----------
+@dp.message(RegStates.waiting_contact, F.contact)
+async def reg_contact(message, state: FSMContext):
+    from urllib.parse import urlencode
+    contact = message.contact
+    if contact.user_id != message.from_user.id:
+        await message.answer("Пожалуйста, поделитесь своим номером телефона.")
+        return
+    data = await state.get_data()
+    token = data.get("reg_token", "")
+    await state.clear()
+
+    phone = contact.phone_number
+    name = f"{contact.first_name} {contact.last_name or ''}".strip()
+    qs = urlencode({"reg": token, "phone": phone, "name": name})
+    return_url = f"{SITE_URL}?{qs}"
+
+    await bot.set_chat_menu_button(
+        chat_id=message.chat.id,
+        menu_button=MenuButtonWebApp(text="Открыть", web_app=WebAppInfo(url=MINI_APP_URL)),
+    )
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✅ Вернуться на сайт", url=return_url)],
+    ])
+    await message.answer(
+        f"✅ Номер подтверждён: {phone}\n\n"
+        f"Имя: {name}\n\n"
+        "Нажмите кнопку ниже, чтобы вернуться на сайт — данные сохранятся автоматически.",
+        reply_markup=kb,
+    )
 
 
 # ---------- Contact / menu buttons ----------

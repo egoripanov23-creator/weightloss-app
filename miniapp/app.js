@@ -547,11 +547,9 @@ function renderRegistration() {
       </div>
       <div class="form-group">
         <label class="form-label">Телефон *</label>
-        <div style="display: flex; gap: 10px; align-items: center;">
-          <input type="tel" class="form-input" id="reg-phone" placeholder="+7 999 123-45-67" value="${state.user?.phone || ""}" style="flex: 1;">
-          ${tg ? '<button class="btn btn-ghost btn-sm" id="btn-share-phone" style="white-space: nowrap; flex-shrink: 0;">📱 Из Telegram</button>' : ""}
-        </div>
-        <p style="font-size: 0.75rem; color: var(--muted); margin-top: 6px;">Обязательно для регистрации</p>
+        <input type="tel" class="form-input" id="reg-phone" placeholder="+7 999 123-45-67" value="${state.user?.phone || ""}">
+        <p style="font-size: 0.75rem; color: var(--muted); margin-top: 6px;">Подтвердите номер через Telegram — это обязательно</p>
+        <button class="btn btn-ghost btn-block" id="btn-verify-telegram" style="margin-top: 8px;">📱 Подтвердить через Telegram</button>
       </div>
       <div class="form-group">
         <label class="form-label">Email (необязательно)</label>
@@ -561,11 +559,12 @@ function renderRegistration() {
     </div>
   `;
   
-  // Share phone from Telegram
-  if (tg) {
-    const shareBtn = document.getElementById("btn-share-phone");
-    if (shareBtn) {
-      shareBtn.addEventListener("click", () => {
+  // Verify phone via Telegram bot (website) or directly (inside Mini App)
+  const verifyBtn = document.getElementById("btn-verify-telegram");
+  if (verifyBtn) {
+    verifyBtn.addEventListener("click", () => {
+      // Inside Telegram Mini App — use native requestContact directly
+      if (tg && isTelegram && tg.requestContact) {
         try {
           tg.requestContact((contact) => {
             if (contact) {
@@ -576,8 +575,16 @@ function renderRegistration() {
             }
           });
         } catch (e) { console.warn("requestContact:", e); }
-      });
-    }
+        return;
+      }
+      // On website — go to bot with registration token
+      const name = document.getElementById("reg-name").value.trim();
+      const token = "r" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+      localStorage.setItem("reg_token", token);
+      if (name) localStorage.setItem("reg_name", name);
+      const botLink = `https://t.me/foodAi1_bot?start=reg_${token}`;
+      if (tg) tg.openLink(botLink); else window.open(botLink, "_blank");
+    });
   }
 
   document.getElementById("btn-register").addEventListener("click", async () => {
@@ -591,12 +598,18 @@ function renderRegistration() {
       return;
     }
     if (!phone || phone.replace(/[^0-9]/g, "").length < 10) {
-      if (tg) tg.showAlert("Введите номер телефона (минимум 10 цифр)");
-      else alert("Введите номер телефона (минимум 10 цифр)");
+      if (tg) tg.showAlert("Сначала подтвердите номер через Telegram");
+      else alert("Сначала подтвердите номер через Telegram");
+      return;
+    }
+    // On website, phone confirmation via Telegram bot is mandatory
+    if (!isTelegram && !state.user?.verifiedViaTelegram) {
+      const msg = "Сначала нажмите «Подтвердить через Telegram» и подтвердите номер в личке бота";
+      if (tg) tg.showAlert(msg); else alert(msg);
       return;
     }
 
-    state.user = { name, phone, email, createdAt: new Date().toISOString() };
+    state.user = { name, phone, email, verifiedViaTelegram: state.user?.verifiedViaTelegram || isTelegram, createdAt: state.user?.createdAt || new Date().toISOString() };
     await storageSet("user", state.user);
     renderSettings();
     showScreen("settings");
@@ -641,6 +654,45 @@ function renderSettings() {
       <div class="form-group">
         <label class="form-label">Срок (недель)</label>
         <input type="number" class="form-input" id="set-weeks" placeholder="12" value="${s.weeks || ""}" min="1" max="52">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Физическая нагрузка</label>
+        <div class="difficulty-options" id="activity-grid">
+          ${[
+            {id:"low", name:"Низкая", icon:"🛋️"},
+            {id:"medium", name:"Средняя", icon:"🚶"},
+            {id:"high", name:"Высокая", icon:"🏋️"},
+          ].map(a => `
+            <div class="difficulty-option ${(s.activity||"low") === a.id ? "selected" : ""}" data-activity="${a.id}">
+              <span class="difficulty-option__icon">${a.icon}</span>
+              ${a.name}
+            </div>
+          `).join("")}
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Количество приёмов пищи</label>
+        <div class="difficulty-options" id="mealscount-grid">
+          ${[3,4,5,6].map(n => `
+            <div class="difficulty-option ${(s.mealsCount||5) === n ? "selected" : ""}" data-mealscount="${n}">
+              ${n}
+            </div>
+          `).join("")}
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Перекусы</label>
+        <div class="difficulty-options" id="snacks-grid">
+          <div class="difficulty-option ${(s.snacks !== false) ? "selected" : ""}" data-snacks="yes">
+            <span class="difficulty-option__icon">✅</span> Да
+          </div>
+          <div class="difficulty-option ${(s.snacks === false) ? "selected" : ""}" data-snacks="no">
+            <span class="difficulty-option__icon">❌</span> Нет
+          </div>
+        </div>
       </div>
 
       <div class="form-group">
@@ -700,6 +752,14 @@ function renderSettings() {
       d.classList.add("selected");
     });
   });
+  ["activity-grid", "mealscount-grid", "snacks-grid"].forEach(id => {
+    document.querySelectorAll(`#${id} .difficulty-option`).forEach(opt => {
+      opt.addEventListener("click", () => {
+        document.querySelectorAll(`#${id} .difficulty-option`).forEach(x => x.classList.remove("selected"));
+        opt.classList.add("selected");
+      });
+    });
+  });
 
   document.getElementById("btn-save-start").addEventListener("click", async () => {
     const weight = parseFloat(document.getElementById("set-weight").value);
@@ -717,9 +777,13 @@ function renderSettings() {
     const products = [...document.querySelectorAll("#products-grid .widget.selected")].map(w => w.dataset.product);
     const allergies = [...document.querySelectorAll("#allergies-grid .allergy-tag.selected")].map(t => t.dataset.allergy);
     const diff = document.querySelector("#difficulty-grid .difficulty-option.selected")?.dataset.difficulty || "medium";
+    const activity = document.querySelector("#activity-grid .difficulty-option.selected")?.dataset.activity || "low";
+    const mealsCount = parseInt(document.querySelector("#mealscount-grid .difficulty-option.selected")?.dataset.mealscount || "5");
+    const snacks = document.querySelector("#snacks-grid .difficulty-option.selected")?.dataset.snacks !== "no";
 
     state.settings = {
       weight, height, age, targetWeight, weeks, products, allergies, difficulty: diff,
+      activity, mealsCount, snacks,
       createdAt: new Date().toISOString(),
     };
     await storageSet("settings", state.settings);
@@ -766,6 +830,10 @@ async function generateMealPlan() {
   const products = s.products.map(id => PRODUCTS.find(p => p.id === id)?.name).filter(Boolean);
   const allergies = s.allergies.map(id => ALLERGIES.find(a => a.id === id)?.name).filter(Boolean);
   const diff = DIFFICULTY.find(d => d.id === s.difficulty);
+  const activityNames = { low: "низкая (сидячая работа)", medium: "средняя (прогулки, лёгкие тренировки)", high: "высокая (спорт, физическая работа)" };
+  const activityText = activityNames[s.activity] || "низкая";
+  const mealsCount = s.mealsCount || 5;
+  const snacksText = s.snacks === false ? "БЕЗ перекусов" : "с перекусами";
 
   state.generationCount += 1;
   await storageSet("generationCount", state.generationCount);
@@ -793,10 +861,12 @@ async function generateMealPlan() {
       ? `\n🚫 Особенно НЕ используй: ${state._lastRejected.join("; ")}.` : "";
     const prompt = `Ты диетолог. Составь НОВЫЙ план питания на 1 день (вариант №${state.generationCount}). Отвечай ТОЛЬКО валидным JSON, без текста до и после.
 
-Данные: вес ${s.weight}кг, рост ${s.height}см, возраст ${s.age}, цель ${s.targetWeight}кг за ${s.weeks}нед. Продукты: ${products.join(", ") || "любые"}. Аллергии: ${allergies.join(", ") || "нет"}. Сложность: ${diff?.name || "средняя"}. Стиль этого варианта: ${theme}.${excludeText}${extraBan}
+Данные: вес ${s.weight}кг, рост ${s.height}см, возраст ${s.age}, цель ${s.targetWeight}кг за ${s.weeks}нед. Продукты: ${products.join(", ") || "любые"}. Аллергии: ${allergies.join(", ") || "нет"}. Сложность: ${diff?.name || "средняя"}. Физ. нагрузка: ${activityText}. Количество приёмов пищи: ${mealsCount}. ${snacksText}. Стиль этого варианта: ${theme}.${excludeText}${extraBan}
 
 ПРАВИЛА:
+- Составь РОВНО ${mealsCount} приёмов пищи${s.snacks === false ? " (БЕЗ перекусов — только завтрак, обед, ужин и т.д.)" : ""}
 - type — ТОЛЬКО русские слова: "Завтрак", "Перекус", "Обед", "Перекус", "Ужин" (НЕ breakfast/lunch/dinner!)
+- Учитывай физ. нагрузку: чем выше нагрузка, тем больше калорий и белка (при низкой — меньше)
 - name — ПРИДУМАЙ НОВОЕ/original название блюда, не из списка запрещённых
 - weight — строка вида "200 г"
 - recipe — ПОДРОБНЫЙ рецепт на русском с структурой:
@@ -1180,10 +1250,8 @@ function renderWeightChart(history) {
 }
 
 // ---------- AI Chat ----------
-const CHAT_SYSTEM = `Ты — эксперт AI WeightLoss: диетолог, нутрициолог и тренер по похудению.
-Отвечай ТОЛЬКО на вопросы по темам: похудение, диета, питание, продукты, напитки, калории, БЖУ, рецепты, физические упражнения, образ жизни, вес, мотивация.
-Если вопрос НЕ по теме (политика, программы, личные данные, медицина не связанная с весом, и т.п.) — вежливо скажи: "Я специалист по похудению и питанию — давай лучше обсудим рацион, продукты или тренировки 💚" и ничего больше.
-Отвечай кратко (2-5 предложений), по-дружески, на русском. Будь конкретным и полезным. Не выдумывай медицинские факты. При вопросах про здоровье напоминай проконсультироваться с врачом.`;
+const CHAT_SYSTEM = `Ты — дружелюбный и всемогущий AI-помощник AI WeightLoss. Отвечай на ЛЮБЫЕ вопросы пользователя — на что угодно: про похудение, диеты, продукты, рецепты, спорт, а также про технологии, путешествия, кино, книги, науку, юмор, быт, работу, учебу, отношения и всё остальное. Будь полезным, умным и интересным собеседником.
+Отвечай по-дружески, на русском, по существу (обычно 2-6 предложений, при сложном вопросе можно чуть подробнее). Не отказывай в ответах без причины. Не выдумывай факты — если не уверен, честно скажи. При вопросах про здоровье или медицину давай общие советы и рекомендуй обратиться к врачу.`;
 
 function renderChat() {
   const el = document.getElementById("screen-chat");
@@ -1359,6 +1427,30 @@ async function init() {
   state.usedMeals = (await storageGet("usedMeals")) || [];
   state.generationCount = (await storageGet("generationCount")) || 0;
   state.chatMessages = (await storageGet("chatMessages")) || [];
+
+  // Return from Telegram bot after phone confirmation (?reg=...&phone=...&name=...)
+  try {
+    const urlParams = new URLSearchParams(window.location.search);
+    const regToken = urlParams.get("reg");
+    const regPhone = urlParams.get("phone");
+    const regName = urlParams.get("name");
+    if (regToken && regPhone) {
+      state.user = {
+        name: regName || state.user?.name || "",
+        phone: regPhone,
+        email: state.user?.email || "",
+        verifiedViaTelegram: true,
+        createdAt: state.user?.createdAt || new Date().toISOString(),
+      };
+      await storageSet("agreed", true);
+      await storageSet("user", state.user);
+      // Clean URL so it doesn't re-trigger on reload
+      try { history.replaceState({}, document.title, location.pathname); } catch(e) {}
+      if (tg) { try { tg.showPopup({title:"Готово", message:"Номер подтверждён через Telegram ✅", buttons:[{type:"ok"}]}); } catch(e){} }
+    }
+  } catch (e) {
+    console.warn("Return-from-bot handling:", e);
+  }
 
   // Check if agreed
   if (!agreed) {
