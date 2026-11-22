@@ -9,8 +9,9 @@ const AI_ENDPOINTS = [
   { url: "https://api.keysaiapifree.com/v1/chat/completions", model: "free-ai" },
   { url: "https://api.aikeyfreeapi.com/v1/chat/completions", model: "free-ai" },
   { url: "https://api.freeapillmkey.com/v1/chat/completions", model: "free-ai" },
+  { url: "https://api.aikeyfreeapi.com/v1/chat/completions", model: "free-ai" },
 ];
-const AI_TIMEOUT_MS = 12000; // fast fail — AI should never hang for minutes
+const AI_TIMEOUT_MS = 20000; // generous — detailed recipes need more generation time
 
 // Suppress unhandled promise rejections from Telegram SDK
 window.addEventListener("unhandledrejection", (e) => {
@@ -801,10 +802,13 @@ async function generateMealPlan() {
   }
 
   if (!data) {
-    console.error("Meal plan error:", lastErr);
-    state.lastError = lastErr?.message || String(lastErr);
-    renderMealPlanError();
-    return;
+    // AI unavailable → auto-use detailed demo plan so user always gets a result
+    console.warn("AI unavailable, using demo plan:", lastErr?.message);
+    data = getDemoMealPlan();
+    data._demo = true;
+    // remember demo dishes too so they don't repeat
+    state.usedMeals = [...state.usedMeals, ...data.meals.map(m => m.name)].slice(-120);
+    await storageSet("usedMeals", state.usedMeals);
   }
 
   // Remember every dish so it never appears again
@@ -920,9 +924,8 @@ function renderMealPlanError() {
       <div style="font-size: 3rem; margin-bottom: 16px;">😕</div>
       <h2>Не удалось составить план</h2>
       <p style="margin-bottom: 12px; color: var(--muted); font-size: 0.85rem;">
-        ИИ временно недоступен. Попробуйте ещё раз через пару секунд.
+        Похоже, ИИ сейчас перегружен. Попробуйте ещё раз через пару секунд.
       </p>
-      ${state.lastApiError ? `<p style="font-size: 0.7rem; color: #ff6b6b; margin-bottom: 12px; word-break: break-all;">${state.lastApiError}</p>` : ""}
       <div style="display: flex; gap: 10px;">
         <button class="btn btn-primary" style="flex: 1;" id="btn-retry">🔄 Попробовать снова</button>
         <button class="btn btn-ghost" style="flex: 1;" id="btn-demo-plan">📋 Демо-план</button>
@@ -937,14 +940,18 @@ function renderMealPlanError() {
 }
 
 function getDemoMealPlan() {
-  const s = state.settings;
   return {
     meals: [
-      { type: "Завтрак", name: "Овсянка с ягодами и мёдом", weight: "250 г", calories: 320, protein: 12, fat: 8, carbs: 52 },
-      { type: "Перекус", name: "Яблоко и горсть миндаля", weight: "150 г", calories: 180, protein: 5, fat: 12, carbs: 15 },
-      { type: "Обед", name: "Куриная грудка с гречкой и салатом", weight: "350 г", calories: 420, protein: 40, fat: 12, carbs: 45 },
-      { type: "Перекус", name: "Творог с фруктами", weight: "200 г", calories: 180, protein: 20, fat: 5, carbs: 15 },
-      { type: "Ужин", name: "Рыба на пару с овощами", weight: "300 г", calories: 280, protein: 30, fat: 10, carbs: 20 },
+      { type: "Завтрак", name: "Овсянка с ягодами и мёдом", weight: "250 г", calories: 320, protein: 12, fat: 8, carbs: 52,
+        recipe: "⏱ Время: 10 мин\n🧺 Ингредиенты: овсяные хлопья 40 г, молоко 150 мл, черника 30 г, мёд 5 г\n👨‍🍳 Приготовление:\n1. Залейте хлопья горячим молоком и оставьте на 5 минут.\n2. Добавьте чернику и перемешайте.\n3. Полейте мёдом перед подачей.\n💡 Совет: для сытности добавьте 10 г миндаля." },
+      { type: "Перекус", name: "Яблоко и горсть миндаля", weight: "150 г", calories: 180, protein: 5, fat: 12, carbs: 15,
+        recipe: "⏱ Время: 2 мин\n🧺 Ингредиенты: яблоко 1 шт (150 г), миндаль 15 г\n👨‍🍳 Приготовление:\n1. Вымойте яблоко и нарежьте дольками.\n2. Отмерьте горсть миндаля.\n3. Съешьте вместе как перекус.\n💡 Совет: миндаль сытный — не съедайте больше горсти." },
+      { type: "Обед", name: "Куриная грудка с гречкой и салатом", weight: "350 г", calories: 420, protein: 40, fat: 12, carbs: 45,
+        recipe: "⏱ Время: 25 мин\n🧺 Ингредиенты: куриная грудка 150 г, гречка 60 г, огурец 50 г, помидор 50 г, оливковое масло 5 г\n👨‍🍳 Приготовление:\n1. Отварите гречку в подсоленной воде 15 минут.\n2. Грудку натрите солью и перцем, жарьте на сухой сковороде по 6 минут с каждой стороны.\n3. Нарежьте овощи, заправьте маслом.\n4. Соедините всё на тарелке.\n💡 Совет: дайте мясу «отдохнуть» 3 минуты перед нарезкой — оно останется сочным." },
+      { type: "Перекус", name: "Творог с фруктами", weight: "200 г", calories: 180, protein: 20, fat: 5, carbs: 15,
+        recipe: "⏱ Время: 3 мин\n🧺 Ингредиенты: творог 150 г, банан 50 г, корица 1 г\n👨‍🍳 Приготовление:\n1. Выложите творог в миску.\n2. Нарежьте банан кружочками.\n3. Посыпьте корицей.\n💡 Совет: творог с низкой жирностью — отличный источник белка." },
+      { type: "Ужин", name: "Рыба на пару с овощами", weight: "300 г", calories: 280, protein: 30, fat: 10, carbs: 20,
+        recipe: "⏱ Время: 20 мин\n🧺 Ингредиенты: филе трески 180 г, брокколи 100 г, морковь 50 г, лимон 10 г\n👨‍🍳 Приготовление:\n1. Нарежьте овощи и выложите в пароварку.\n2. Выложите рыбу сверху, сбрызните лимоном.\n3. Готовьте на пару 15 минут.\n4. Приправьте солью и зеленью.\n💡 Совет: рыба на пару сохраняет максимум полезных веществ." },
     ],
     total: { calories: 1380, protein: 107, fat: 47, carbs: 147 },
     tip: "Пейте больше воды! Рекомендуется 2-2.5 литра в день. 💧",
