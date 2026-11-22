@@ -5,11 +5,13 @@ import base64
 import json
 import logging
 import os
+import secrets
 from datetime import datetime
 from urllib.parse import urlencode
 
 from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
+import db
 
 from aiogram import Bot, Dispatcher, F
 from aiogram.client.default import DefaultBotProperties
@@ -182,8 +184,19 @@ async def cmd_start(message, state: FSMContext):
     if args and not args.startswith(("reg_", "ticket_", "review_")):
         log_source(message.from_user.id, args)
     if args.startswith("reg_"):
-        token = args[4:]
-        await state.update_data(reg_token=token)
+        raw = args[4:] + "=" * (-len(args[4:]) % 4)
+        payload = {}
+        try:
+            payload = json.loads(base64.urlsafe_b64decode(raw).decode("utf-8"))
+        except Exception:
+            pass
+        token = payload.get("t", args[4:])
+        await state.update_data(reg_token=token, reg_login=payload.get("login", ""),
+                                reg_password=payload.get("password", ""),
+                                reg_email=payload.get("email", ""), reg_name=payload.get("name", ""))
+        if not payload.get("login") or not payload.get("password"):
+            await message.answer("⚠️ Данные регистрации не передались. Вернитесь на сайт и попробуйте снова.")
+            return
         await state.set_state(RegStates.waiting_contact)
         kb = ReplyKeyboardMarkup(
             keyboard=[[KeyboardButton(text="📱 Подтвердить номер", request_contact=True)]],
@@ -209,6 +222,29 @@ async def cmd_start(message, state: FSMContext):
             logger.error(f"Ticket deeplink parse error: {e}")
             await message.answer("Не удалось создать тикет из приложения. Напишите сообщение вручную — я передам менеджеру.")
             await state.set_state(TicketStates.waiting_message)
+        return
+
+    # Login deep-link: /start login_<base64json>
+    if args.startswith("login_"):
+        raw = args[6:] + "=" * (-len(args[6:]) % 4)
+        try:
+            payload = json.loads(base64.urlsafe_b64decode(raw).decode("utf-8"))
+            user = db.verify_user(payload.get("login", ""), payload.get("password", ""))
+            if user:
+                session = secrets.token_urlsafe(12)
+                qs = urlencode({"session": session, "login": user["login"], "name": user.get("name", "") or user["login"]})
+                kb = InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="✅ Войти в приложение", url=f"{SITE_URL}?{qs}")],
+                ])
+                await message.answer(
+                    f"✅ Добро пожаловать, {user['login']}!\n\nНажмите кнопку, чтобы войти в приложение.",
+                    reply_markup=kb,
+                )
+            else:
+                await message.answer("❌ Неверный логин или пароль. Попробуйте ещё раз на сайте.")
+        except Exception as e:
+            logger.error(f"Login deeplink error: {e}")
+            await message.answer("Ошибка входа. Попробуйте ещё раз.")
         return
 
     # Review deep-link from Mini App: /start review_<base64json>
@@ -377,6 +413,44 @@ async def cb_admin_close(callback):
         await callback.answer("Тикет не найден", show_alert=True)
 
 
+@dp.message(Command("users"))
+async def cmd_users(message):
+    if message.from_user.id not in ADMIN_IDS:
+        await message.answer("⛔ Только для менеджера.")
+        return
+    users = db.list_users(30)
+    text = f"👥 <b>Пользователей в БД: {db.count_users()}</b>\n\n"
+    if not users:
+        text += "Пока нет зарегистрированных пользователей."
+    for u in users:
+        text += (
+            f"<b>#{u['id']} {u['login']}</b>\n"
+            f"📱 {u['phone']}"
+            + (f" · ✉️ {u['email']}" if u.get('email') else "")
+            + f"\nЗаходил: {u.get('last_login') or 'никогда'}\n\n"
+        )
+    await message.answer(text)
+
+
+@dp.message(Command("finduser"))
+async def cmd_finduser(message):
+    if message.from_user.id not in ADMIN_IDS:
+        await message.answer("⛔ Только для менеджера.")
+        return
+    parts = message.text.split(maxsplit=1)
+    if len(parts) < 2:
+        await message.answer("Использование: /finduser <логин>")
+        return
+    u = db.get_user(parts[1])
+    if not u:
+        await message.answer("Пользователь не найден.")
+        return
+    await message.answer(
+        f"<b>{u['login']}</b>\n📱 {u['phone']}\n✉️ {u.get('email') or '—'}\n"
+        f"Имя: {u.get('name') or '—'}\nСоздан: {u['created_at']}\nПоследний вход: {u.get('last_login') or 'никогда'}"
+    )
+
+
 @dp.message(Command("stats"))
 async def cmd_stats(message):
     if message.from_user.id not in ADMIN_IDS:
@@ -456,6 +530,8 @@ async def cmd_help(message):
         "/alltickets — все тикеты (менеджер)\n"
         "/reviews — отзывы пользователей (менеджер)\n"
         "/stats — статистика и источники (менеджер)\n"
+        "/users — пользователи в БД (менеджер)\n"
+        "/finduser <логин> — найти пользователя (менеджер)\n"
         "/help — эта справка",
         reply_markup=main_menu(),
     )
@@ -578,11 +654,24 @@ async def reg_contact(message, state: FSMContext):
         return
     data = await state.get_data()
     token = data.get("reg_token", "")
+    login = data.get("reg_login", "")
+    password = data.get("reg_password", "")
+    email = data.get("reg_email", "")
+    name = f"{contact.first_name} {contact.last_name or ''}".strip() or data.get("reg_name", "")
     await state.clear()
 
     phone = contact.phone_number
-    name = f"{contact.first_name} {contact.last_name or ''}".strip()
-    qs = urlencode({"reg": token, "phone": phone, "name": name})
+
+    # Save to database
+    ok, result = db.create_user(
+        login=login, password=password, phone=phone,
+        email=email, name=name, telegram_id=message.from_user.id,
+    )
+    if not ok:
+        await message.answer(f"⚠️ {result}\n\nВернитесь на сайт и выберите другой логин.")
+        return
+
+    qs = urlencode({"reg": token, "phone": phone, "name": name, "login": login})
     return_url = f"{SITE_URL}?{qs}"
 
     await bot.set_chat_menu_button(

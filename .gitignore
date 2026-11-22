@@ -5,8 +5,10 @@ __pycache__/
 venv/
 env/
 
-# Secrets
+# Secrets & local database
 .env
+*.db
+*.db-journal
 
 # OS
 .DS_Store

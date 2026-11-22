@@ -435,7 +435,7 @@ function showScreen(name) {
   state.screen = name;
   // Hide floating review badge on onboarding screens so it never blocks buttons
   const reviewBadge = document.getElementById("review-btn");
-  if (reviewBadge) reviewBadge.classList.toggle("hidden", ["agreement", "registration", "mealplan", "settings"].includes(name));
+  if (reviewBadge) reviewBadge.classList.toggle("hidden", ["agreement", "registration", "login", "mealplan", "settings"].includes(name));
   try { if (tgSupports("BackButton") && tg?.BackButton) tg.BackButton.isVisible = (name !== "agreement" && name !== "mealplan"); } catch (e) {}
   
   // Haptic feedback
@@ -580,6 +580,45 @@ function renderAgreement() {
   });
 }
 
+function renderLogin() {
+  const el = document.getElementById("screen-login");
+  el.innerHTML = `
+    <div class="glass animate-in" style="max-width:480px; margin:0 auto;">
+      <div style="text-align:center; margin-bottom:24px;">
+        <div style="font-size:2.5rem; margin-bottom:12px;">🔐</div>
+        <h1>Вход</h1>
+        <p style="color:var(--muted); font-size:0.85rem;">Введите логин и пароль, чтобы войти к себе</p>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Логин</label>
+        <input type="text" class="form-input" id="login-login" placeholder="Ваш логин" autocomplete="username">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Пароль</label>
+        <input type="password" class="form-input" id="login-password" placeholder="Ваш пароль" autocomplete="current-password">
+      </div>
+      <button class="btn btn-primary btn-block" id="btn-login">🔓 Войти</button>
+      <button class="btn btn-ghost btn-block" id="btn-to-register" style="margin-top:10px;">Нет аккаунта? Зарегистрироваться</button>
+    </div>
+  `;
+  document.getElementById("btn-login").addEventListener("click", () => {
+    const login = document.getElementById("login-login").value.trim();
+    const password = document.getElementById("login-password").value;
+    if (!login || !password) {
+      if (tg) tg.showAlert("Введите логин и пароль"); else alert("Введите логин и пароль");
+      return;
+    }
+    const payload = btoa(unescape(encodeURIComponent(JSON.stringify({ login, password }))))
+      .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    const link = `https://t.me/foodAi1_bot?start=login_${payload}`;
+    if (tg) { try { tg.openLink(link); } catch (e) { window.open(link, "_blank"); } }
+    else window.open(link, "_blank");
+  });
+  document.getElementById("btn-to-register").addEventListener("click", () => {
+    renderAgreement(); showScreen("agreement");
+  });
+}
+
 function renderRegistration() {
   const el = document.getElementById("screen-registration");
   el.innerHTML = `
@@ -588,6 +627,14 @@ function renderRegistration() {
         <div style="font-size: 2.5rem; margin-bottom: 12px;">👋</div>
         <h1>Добро пожаловать!</h1>
         <p>Расскажите о себе, чтобы мы составили персональный план</p>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Логин *</label>
+        <input type="text" class="form-input" id="reg-login" placeholder="Придумайте логин" value="" autocomplete="username">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Пароль *</label>
+        <input type="password" class="form-input" id="reg-password" placeholder="Придумайте пароль" value="" autocomplete="new-password">
       </div>
       <div class="form-group">
         <label class="form-label">Ваше имя *</label>
@@ -614,10 +661,22 @@ function renderRegistration() {
       // Always route through the bot — reliable on both website and Mini App.
       // tg.requestContact is unreliable across Telegram versions.
       const name = document.getElementById("reg-name").value.trim();
+      const login = document.getElementById("reg-login").value.trim();
+      const password = document.getElementById("reg-password").value;
+      const email = document.getElementById("reg-email")?.value.trim() || "";
+      if (!login || !password) {
+        const msg = "Введите логин и пароль";
+        if (tg) tg.showAlert(msg); else alert(msg);
+        return;
+      }
       const token = "r" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
       localStorage.setItem("reg_token", token);
+      localStorage.setItem("reg_login", login);
+      localStorage.setItem("reg_password", password);
       if (name) localStorage.setItem("reg_name", name);
-      const botLink = `https://t.me/foodAi1_bot?start=reg_${token}`;
+      const payload = btoa(unescape(encodeURIComponent(JSON.stringify({ t: token, login, password, email, name }))))
+        .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+      const botLink = `https://t.me/foodAi1_bot?start=reg_${payload}`;
       if (tg) { try { tg.openLink(botLink); } catch (e) { window.open(botLink, "_blank"); } }
       else window.open(botLink, "_blank");
     });
@@ -633,6 +692,13 @@ function renderRegistration() {
       else alert("Введите ваше имя");
       return;
     }
+    const login = document.getElementById("reg-login")?.value.trim();
+    const password = document.getElementById("reg-password")?.value;
+    if (!login || !password) {
+      const msg = "Введите логин и пароль";
+      if (tg) tg.showAlert(msg); else alert(msg);
+      return;
+    }
     if (!phone || phone.replace(/[^0-9]/g, "").length < 10) {
       if (tg) tg.showAlert("Сначала подтвердите номер через Telegram");
       else alert("Сначала подтвердите номер через Telegram");
@@ -645,7 +711,7 @@ function renderRegistration() {
       return;
     }
 
-    state.user = { name, phone, email, verifiedViaTelegram: state.user?.verifiedViaTelegram || isTelegram, createdAt: state.user?.createdAt || new Date().toISOString() };
+    state.user = { name, phone, email, login, verifiedViaTelegram: state.user?.verifiedViaTelegram || isTelegram, createdAt: state.user?.createdAt || new Date().toISOString() };
     await storageSet("user", state.user);
     renderSettings();
     showScreen("settings");
@@ -1492,19 +1558,36 @@ async function init() {
     const regToken = urlParams.get("reg");
     const regPhone = urlParams.get("phone");
     const regName = urlParams.get("name");
+    const regLogin = urlParams.get("login");
+    const session = urlParams.get("session");
     if (regToken && regPhone) {
       state.user = {
         name: regName || state.user?.name || "",
         phone: regPhone,
         email: state.user?.email || "",
+        login: regLogin || state.user?.login || "",
         verifiedViaTelegram: true,
         createdAt: state.user?.createdAt || new Date().toISOString(),
       };
       await storageSet("agreed", true);
       await storageSet("user", state.user);
-      // Clean URL so it doesn't re-trigger on reload
       try { history.replaceState({}, document.title, location.pathname); } catch(e) {}
       if (tg) { try { tg.showPopup({title:"Готово", message:"Номер подтверждён через Telegram ✅", buttons:[{type:"ok"}]}); } catch(e){} }
+    } else if (session && regLogin) {
+      // Returned from bot after successful login
+      state.user = {
+        name: regName || regLogin,
+        login: regLogin,
+        phone: state.user?.phone || "",
+        email: state.user?.email || "",
+        verifiedViaTelegram: true,
+        session: session,
+        createdAt: state.user?.createdAt || new Date().toISOString(),
+      };
+      await storageSet("agreed", true);
+      await storageSet("user", state.user);
+      try { history.replaceState({}, document.title, location.pathname); } catch(e) {}
+      if (tg) { try { tg.showPopup({title:"Добро пожаловать", message:`Вы вошли как ${regLogin} ✅`, buttons:[{type:"ok"}]}); } catch(e){} }
     }
   } catch (e) {
     console.warn("Return-from-bot handling:", e);
@@ -1517,10 +1600,10 @@ async function init() {
     return;
   }
 
-  // Check if registered
+  // Check if registered → show login screen
   if (!state.user) {
-    renderRegistration();
-    showScreen("registration");
+    renderLogin();
+    showScreen("login");
     return;
   }
 
@@ -1591,7 +1674,7 @@ if (tgSupports("BackButton") && tg?.BackButton?.onClick) {
     } else if (state.screen === "chat") {
       renderMealPlan();
       showScreen("mealplan");
-    } else if (state.screen === "registration") {
+    } else if (state.screen === "registration" || state.screen === "login") {
       renderAgreement();
       showScreen("agreement");
     }
