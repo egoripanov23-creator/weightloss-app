@@ -16,11 +16,25 @@ const PROXY_URL = "http://localhost:8080/ai";
 
 // Suppress unhandled promise rejections from Telegram SDK
 window.addEventListener("unhandledrejection", (e) => {
-  if (e.reason?.message?.includes("WebAppMethodUnsupported") || 
-      e.reason?.message?.includes("CloudStorage")) {
+  if (e.reason && (e.reason.message?.includes("WebAppMethodUnsupported") || 
+      e.reason.message?.includes("CloudStorage") ||
+      e.reason.toString?.().includes("WebAppMethodUnsupported"))) {
     e.preventDefault();
+    e.stopPropagation();
   }
 });
+
+// Override CloudStorage to prevent errors in non-Telegram environments
+if (window.Telegram?.WebApp?.CloudStorage) {
+  const origGetItem = window.Telegram.WebApp.CloudStorage.getItem;
+  const origSetItem = window.Telegram.WebApp.CloudStorage.setItem;
+  window.Telegram.WebApp.CloudStorage.getItem = function(key, cb) {
+    try { cb(new Error("not supported"), null); } catch(e) {}
+  };
+  window.Telegram.WebApp.CloudStorage.setItem = function(key, val, cb) {
+    try { if (cb) cb(new Error("not supported")); } catch(e) {}
+  };
+}
 
 // ---------- Telegram WebApp ----------
 const tg = window.Telegram?.WebApp;
@@ -1242,6 +1256,10 @@ if (tg?.BackButton?.onClick) {
 
 // ---------- Start ----------
 document.addEventListener("DOMContentLoaded", () => {
-  init();
-  renderBottomNav();
+  try {
+    init().catch(err => console.error("Init error:", err));
+    renderBottomNav();
+  } catch (err) {
+    console.error("DOMContentLoaded error:", err);
+  }
 });
