@@ -69,44 +69,79 @@ async function storageSet(key, value) {
 }
 
 // ---------- AI API ----------
-async function aiChat(messages, temperature = 0.7) {
-  try {
-    const res = await fetch(`${AI_BASE_URL}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${AI_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: AI_MODEL,
-        messages: messages,
-        temperature: temperature,
-        max_tokens: 2000,
-      }),
-    });
-    if (!res.ok) throw new Error(`AI error: ${res.status}`);
-    const data = await res.json();
-    return data.choices?.[0]?.message?.content || "";
-  } catch (err) {
-    console.error("AI error:", err);
-    return null;
+async function aiChat(messages, temperature = 0.7, retries = 2) {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 30000);
+      
+      const res = await fetch(`${AI_BASE_URL}/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${AI_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: AI_MODEL,
+          messages: messages,
+          temperature: temperature,
+          max_tokens: 2000,
+        }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+      
+      if (!res.ok) {
+        const errText = await res.text().catch(() => "");
+        console.error(`AI error ${res.status}:`, errText);
+        if (attempt < retries) {
+          await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+          continue;
+        }
+        return null;
+      }
+      const data = await res.json();
+      return data.choices?.[0]?.message?.content || "";
+    } catch (err) {
+      console.error("AI error:", err);
+      if (attempt < retries) {
+        await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+        continue;
+      }
+      return null;
+    }
   }
+  return null;
 }
 
 // ---------- Data ----------
 const PRODUCTS = [
   { id: "chicken", name: "Курица", icon: "🍗", desc: "Белое мясо" },
+  { id: "turkey", name: "Индейка", icon: "🦃", desc: "Диетическое мясо" },
   { id: "fish", name: "Рыба", icon: "🐟", desc: "Лосось, треска" },
+  { id: "shrimp", name: "Креветки", icon: "🦐", desc: "Морепродукты" },
   { id: "beef", name: "Говядина", icon: "🥩", desc: "Красное мясо" },
+  { id: "pork", name: "Свинина", icon: "🥓", desc: "Постная" },
   { id: "eggs", name: "Яйца", icon: "🥚", desc: "Куриные" },
   { id: "rice", name: "Рис", icon: "🍚", desc: "Белый/бурый" },
+  { id: "buckwheat", name: "Гречка", icon: "🌾", desc: "Каша" },
   { id: "pasta", name: "Паста", icon: "🍝", desc: "Макароны" },
+  { id: "potato", name: "Картофель", icon: "🥔", desc: "Отварной" },
   { id: "vegetables", name: "Овощи", icon: "🥦", desc: "Свежие" },
   { id: "fruits", name: "Фрукты", icon: "🍎", desc: "Сезонные" },
+  { id: "berries", name: "Ягоды", icon: "🫐", desc: "Черника, малина" },
   { id: "dairy", name: "Молочные", icon: "🥛", desc: "Творог, кефир" },
+  { id: "cheese", name: "Сыр", icon: "🧀", desc: "Твёрдый" },
   { id: "nuts", name: "Орехи", icon: "🥜", desc: "Миндаль, грецкие" },
   { id: "avocado", name: "Авокадо", icon: "🥑", desc: "Здоровые жиры" },
   { id: "oats", name: "Овсянка", icon: "🌾", desc: "Каши" },
+  { id: "bread", name: "Хлеб", icon: "🍞", desc: "Цельнозерновой" },
+  { id: "tofu", name: "Тофу", icon: "🧊", desc: "Растительный белок" },
+  { id: "lentils", name: "Чечевица", icon: "🫘", desc: "Бобовые" },
+  { id: "mushrooms", name: "Грибы", icon: "🍄", desc: "Шампиньоны" },
+  { id: "olive_oil", name: "Оливковое масло", icon: "🫒", desc: "Здоровые жиры" },
+  { id: "honey", name: "Мёд", icon: "🍯", desc: "Натуральный" },
+  { id: "dark_chocolate", name: "Тёмный шоколад", icon: "🍫", desc: "70%+ какао" },
 ];
 
 const ALLERGIES = [
@@ -278,8 +313,16 @@ function renderRegistration() {
         <p>Расскажите о себе, чтобы мы составили персональный план</p>
       </div>
       <div class="form-group">
-        <label class="form-label">Ваше имя</label>
-        <input type="text" class="form-input" id="reg-name" placeholder="Как вас зовут?" value="${state.user?.name || ""}">
+        <label class="form-label">Ваше имя *</label>
+        <input type="text" class="form-input" id="reg-name" placeholder="Как вас зовут?" value="${state.user?.name || (tg?.initDataUnsafe?.user?.first_name || "")}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Телефон *</label>
+        <div style="display: flex; gap: 10px; align-items: center;">
+          <input type="tel" class="form-input" id="reg-phone" placeholder="+7 999 123-45-67" value="${state.user?.phone || ""}" style="flex: 1;">
+          ${tg ? '<button class="btn btn-ghost btn-sm" id="btn-share-phone" style="white-space: nowrap; flex-shrink: 0;">📱 Из Telegram</button>' : ""}
+        </div>
+        <p style="font-size: 0.75rem; color: var(--muted); margin-top: 6px;">Обязательно для регистрации</p>
       </div>
       <div class="form-group">
         <label class="form-label">Email (необязательно)</label>
@@ -289,14 +332,40 @@ function renderRegistration() {
     </div>
   `;
   
+  // Share phone from Telegram
+  if (tg) {
+    const shareBtn = document.getElementById("btn-share-phone");
+    if (shareBtn) {
+      shareBtn.addEventListener("click", () => {
+        tg.requestContact((contact) => {
+          if (contact) {
+            document.getElementById("reg-phone").value = contact.phone_number;
+            if (!document.getElementById("reg-name").value) {
+              document.getElementById("reg-name").value = contact.first_name + " " + (contact.last_name || "");
+            }
+          }
+        });
+      });
+    }
+  }
+
   document.getElementById("btn-register").addEventListener("click", async () => {
     const name = document.getElementById("reg-name").value.trim();
+    const phone = document.getElementById("reg-phone").value.trim();
     const email = document.getElementById("reg-email").value.trim();
+
     if (!name) {
       if (tg) tg.showAlert("Введите ваше имя");
+      else alert("Введите ваше имя");
       return;
     }
-    state.user = { name, email, createdAt: new Date().toISOString() };
+    if (!phone || phone.replace(/[^0-9]/g, "").length < 10) {
+      if (tg) tg.showAlert("Введите номер телефона (минимум 10 цифр)");
+      else alert("Введите номер телефона (минимум 10 цифр)");
+      return;
+    }
+
+    state.user = { name, phone, email, createdAt: new Date().toISOString() };
     await storageSet("user", state.user);
     renderSettings();
     showScreen("settings");
@@ -572,11 +641,38 @@ function renderMealPlanError() {
     <div class="glass animate-in" style="max-width: 480px; margin: 0 auto; text-align: center;">
       <div style="font-size: 3rem; margin-bottom: 16px;">😕</div>
       <h2>Не удалось составить план</h2>
-      <p style="margin-bottom: 20px;">Проверьте подключение к интернету и попробуйте снова.</p>
-      <button class="btn btn-primary btn-block" id="btn-retry">🔄 Попробовать снова</button>
+      <p style="margin-bottom: 12px;">Возможные причины:</p>
+      <ul style="text-align: left; color: var(--muted); font-size: 0.85rem; margin-bottom: 20px; padding-left: 20px;">
+        <li>Нет подключения к интернету</li>
+        <li>AI-сервер временно недоступен</li>
+        <li>Проблема с CORS (попробуйте открыть в браузере)</li>
+      </ul>
+      <div style="display: flex; gap: 10px;">
+        <button class="btn btn-primary" style="flex: 1;" id="btn-retry">🔄 Попробовать снова</button>
+        <button class="btn btn-ghost" style="flex: 1;" id="btn-demo-plan">📋 Демо-план</button>
+      </div>
     </div>
   `;
   document.getElementById("btn-retry").addEventListener("click", () => generateMealPlan());
+  document.getElementById("btn-demo-plan").addEventListener("click", () => {
+    state.mealPlan = getDemoMealPlan();
+    renderMealPlan();
+  });
+}
+
+function getDemoMealPlan() {
+  const s = state.settings;
+  return {
+    meals: [
+      { type: "Завтрак", name: "Овсянка с ягодами и мёдом", weight: "250 г", calories: 320, protein: 12, fat: 8, carbs: 52 },
+      { type: "Перекус", name: "Яблоко и горсть миндаля", weight: "150 г", calories: 180, protein: 5, fat: 12, carbs: 15 },
+      { type: "Обед", name: "Куриная грудка с гречкой и салатом", weight: "350 г", calories: 420, protein: 40, fat: 12, carbs: 45 },
+      { type: "Перекус", name: "Творог с фруктами", weight: "200 г", calories: 180, protein: 20, fat: 5, carbs: 15 },
+      { type: "Ужин", name: "Рыба на пару с овощами", weight: "300 г", calories: 280, protein: 30, fat: 10, carbs: 20 },
+    ],
+    total: { calories: 1380, protein: 107, fat: 47, carbs: 147 },
+    tip: "Пейте больше воды! Рекомендуется 2-2.5 литра в день. 💧",
+  };
 }
 
 // ---------- Weight Tracker ----------
