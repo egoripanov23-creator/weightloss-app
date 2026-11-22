@@ -153,59 +153,88 @@ async function storageSet(key, value) {
 }
 
 // ---------- AI API ----------
-// Try providers in smart order: last working first, then the rest.
-// On any failure (down / 429 / quota / timeout) → immediately switch to next.
+// Smart automatic failover across ALL free providers.
+// - Last working provider is tried first.
+// - Provider that returns 429/quota is put on a short "cooldown" (skipped this round).
+// - Each provider gets 2 attempts; on repeated failure we move on automatically.
+// - If a cooldown provider is needed again, it is retried after a short pause.
+const AI_COOLDOWN_MS = 30000; // 30s pause for rate-limited providers
+
 async function aiChat(messages, temperature = 0.7) {
   const lastId = localStorage.getItem("ai_provider_ok") || "";
+  const now = Date.now();
+  // Parse cooldowns: { id: timestamp-until }
+  let cooldowns = {};
+  try { cooldowns = JSON.parse(localStorage.getItem("ai_cooldowns") || "{}"); } catch (e) {}
+
+  // Order: last-working first (even if cooling, we retry it), then the rest
   const ordered = [
     ...AI_ENDPOINTS.filter(e => e.id === lastId),
     ...AI_ENDPOINTS.filter(e => e.id !== lastId),
   ];
 
   for (const ep of ordered) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), AI_TIMEOUT_MS);
-    try {
-      const headers = { "Content-Type": "application/json" };
-      if (ep.key) headers["Authorization"] = `Bearer ${ep.key}`;
+    // Skip providers in cooldown (except last-working, which we always retry)
+    const cooling = cooldowns[ep.id] && cooldowns[ep.id] > now;
+    if (cooling && ep.id !== lastId) {
+      console.warn(`AI ${ep.id}: cooldown, skipping`);
+      continue;
+    }
 
-      const res = await fetch(ep.url, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          model: ep.model,
-          messages: messages,
-          temperature: temperature,
-          max_tokens: 2000,
-        }),
-        signal: controller.signal,
-      });
-      clearTimeout(timeout);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), AI_TIMEOUT_MS);
+      try {
+        const headers = { "Content-Type": "application/json" };
+        if (ep.key) headers["Authorization"] = `Bearer ${ep.key}`;
 
-      if (res.ok) {
-        const data = await res.json();
-        // Different providers may format the answer differently
-        const content =
-          data.choices?.[0]?.message?.content ||
-          data.choices?.[0]?.text ||
-          data.response ||
-          data.candidates?.[0]?.content?.parts?.[0]?.text ||
-          "";
-        if (content) {
-          localStorage.setItem("ai_provider_ok", ep.id); // remember working provider
-          state.lastApiError = null;
-          return content;
+        const res = await fetch(ep.url, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            model: ep.model,
+            messages: messages,
+            temperature: temperature,
+            max_tokens: 2000,
+          }),
+          signal: controller.signal,
+        });
+        clearTimeout(timeout);
+
+        if (res.ok) {
+          const data = await res.json();
+          const content =
+            data.choices?.[0]?.message?.content ||
+            data.choices?.[0]?.text ||
+            data.response ||
+            data.candidates?.[0]?.content?.parts?.[0]?.text ||
+            "";
+          if (content) {
+            localStorage.setItem("ai_provider_ok", ep.id); // remember working
+            delete cooldowns[ep.id]; // clear cooldown on success
+            localStorage.setItem("ai_cooldowns", JSON.stringify(cooldowns));
+            state.lastApiError = null;
+            return content;
+          }
+          state.lastApiError = `${ep.id}: пустой ответ`;
+        } else {
+          const txt = await res.text().catch(() => "");
+          state.lastApiError = `${ep.id}: HTTP ${res.status}`;
+          console.warn(`AI ${ep.id} -> ${res.status}: ${txt.substring(0, 80)}`);
+          // Rate limit / quota / overload → put on cooldown, move to next provider
+          if (res.status === 429 || res.status === 402 || res.status === 503) {
+            cooldowns[ep.id] = Date.now() + AI_COOLDOWN_MS;
+            localStorage.setItem("ai_cooldowns", JSON.stringify(cooldowns));
+            break; // stop retrying this provider
+          }
         }
-        state.lastApiError = `${ep.id}: пустой ответ`;
-      } else {
-        const txt = await res.text().catch(() => "");
-        state.lastApiError = `${ep.id}: HTTP ${res.status}`;
-        console.warn(`AI ${ep.id} -> ${res.status}: ${txt.substring(0, 80)}`);
+      } catch (err) {
+        clearTimeout(timeout);
+        state.lastApiError = err?.name === "AbortError" ? `${ep.id}: таймаут` : `${ep.id}: ${err?.message || "сеть"}`;
+        console.warn(`AI ${ep.id} error:`, err?.message);
       }
-    } catch (err) {
-      clearTimeout(timeout);
-      state.lastApiError = err?.name === "AbortError" ? `${ep.id}: таймаут` : `${ep.id}: ${err?.message || "сеть"}`;
-      console.warn(`AI ${ep.id} error:`, err?.message);
+      // small pause before retrying same provider
+      if (attempt === 0) await new Promise(r => setTimeout(r, 400));
     }
   }
   return null;
