@@ -433,6 +433,9 @@ function showScreen(name) {
   target.classList.remove("exit");
   target.classList.add("active");
   state.screen = name;
+  // Hide floating review badge on onboarding screens so it never blocks buttons
+  const reviewBadge = document.getElementById("review-btn");
+  if (reviewBadge) reviewBadge.classList.toggle("hidden", ["agreement", "registration"].includes(name));
   try { if (tgSupports("BackButton") && tg?.BackButton) tg.BackButton.isVisible = (name !== "agreement" && name !== "mealplan"); } catch (e) {}
   
   // Haptic feedback

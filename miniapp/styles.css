@@ -1343,9 +1343,9 @@ textarea.form-input { font-family: var(--font); }
 .review-btn {
   position: fixed;
   left: 50%;
-  bottom: 86px;
+  bottom: 104px;
   transform: translateX(-50%);
-  z-index: 120;
+  z-index: 90;  /* below bottom-nav (100) so nav buttons stay clickable */
   display: flex;
   align-items: center;
   gap: 6px;
@@ -1403,6 +1403,6 @@ textarea.form-input { font-family: var(--font); }
 .referral-card__code { font-family: monospace; font-size: 1.1rem; color: var(--text); background: rgba(0,0,0,0.3); padding: 8px 12px; border-radius: 8px; margin: 8px 0; display: inline-block; }
 
 @media (max-width: 360px) {
-  .review-btn { font-size: 0.7rem; padding: 7px 12px; bottom: 80px; }
+  .review-btn { font-size: 0.7rem; padding: 7px 12px; bottom: 96px; }
   .review-stars span { font-size: 1.6rem; }
 }
