@@ -33,6 +33,7 @@ MINI_APP_URL = "https://aifoodbot.duckdns.org/"
 SITE_URL = "https://aifoodbot.duckdns.org/"
 TICKETS_FILE = os.path.join(os.path.dirname(__file__), "tickets.json")
 REVIEWS_FILE = os.path.join(os.path.dirname(__file__), "reviews.json")
+SOURCES_FILE = os.path.join(os.path.dirname(__file__), "sources.json")
 
 # Admin IDs (manager) — ticket notifications are sent here.
 ADMIN_IDS = {5781304476}  # ваш Telegram ID (менеджер тикетов)
@@ -60,6 +61,22 @@ def save_tickets(tickets):
 
 def next_ticket_id(tickets):
     return max([t.get("id", 0) for t in tickets], default=0) + 1
+
+
+# ---------- Traffic source tracking ----------
+def log_source(user_id, source):
+    try:
+        try:
+            with open(SOURCES_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            data = {}
+        data[source] = data.get(source, 0) + 1
+        data["_users"] = data.get("_users", 0) + 1
+        with open(SOURCES_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logger.error(f"Failed to log source: {e}")
 
 
 # ---------- Review storage ----------
@@ -161,6 +178,9 @@ async def cmd_start(message, state: FSMContext):
     args = ""
     if message.text and len(message.text.split(maxsplit=1)) > 1:
         args = message.text.split(maxsplit=1)[1].strip()
+    # Track traffic source (e.g. /start channel1)
+    if args and not args.startswith(("reg_", "ticket_", "review_")):
+        log_source(message.from_user.id, args)
     if args.startswith("reg_"):
         token = args[4:]
         await state.update_data(reg_token=token)
@@ -357,6 +377,35 @@ async def cb_admin_close(callback):
         await callback.answer("Тикет не найден", show_alert=True)
 
 
+@dp.message(Command("stats"))
+async def cmd_stats(message):
+    if message.from_user.id not in ADMIN_IDS:
+        await message.answer("⛔ Только для менеджера.")
+        return
+    try:
+        with open(SOURCES_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        data = {}
+    reviews = load_reviews()
+    tickets = load_tickets()
+    total_users = data.get("_users", 0)
+    text = (
+        "📊 <b>Статистика</b>\n\n"
+        f"👥 Запусков по referral-ссылкам: {total_users}\n"
+        f"⭐ Отзывов: {len(reviews)}\n"
+        f"🎫 Тикетов: {len(tickets)}\n\n"
+        "<b>Источники переходов:</b>\n"
+    )
+    sources = {k: v for k, v in data.items() if not k.startswith("_")}
+    if sources:
+        for k, v in sorted(sources.items(), key=lambda x: -x[1]):
+            text += f"• {k}: {v}\n"
+    else:
+        text += "• пока нет (добавьте ?start=название в ссылки)\n"
+    await message.answer(text)
+
+
 @dp.message(Command("reviews"))
 async def cmd_reviews(message):
     if message.from_user.id not in ADMIN_IDS:
@@ -406,6 +455,7 @@ async def cmd_help(message):
         "/close <id> — закрыть (менеджер)\n"
         "/alltickets — все тикеты (менеджер)\n"
         "/reviews — отзывы пользователей (менеджер)\n"
+        "/stats — статистика и источники (менеджер)\n"
         "/help — эта справка",
         reply_markup=main_menu(),
     )
