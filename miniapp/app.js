@@ -1584,29 +1584,127 @@ if (tgSupports("BackButton") && tg?.BackButton?.onClick) {
 } catch (e) { console.warn("BackButton:", e); }
 
 // ---------- Support sheet ----------
+// ---------- Ticket system ----------
+function loadTickets() {
+  try { return JSON.parse(localStorage.getItem("app_tickets") || "[]"); } catch (e) { return []; }
+}
+function saveTickets(list) {
+  localStorage.setItem("app_tickets", JSON.stringify(list));
+  updateTicketCount();
+}
+function updateTicketCount() {
+  const el = document.getElementById("ticket-count");
+  if (el) el.textContent = loadTickets().length;
+}
+
+function renderTicketList() {
+  const el = document.getElementById("ticket-list");
+  if (!el) return;
+  const list = loadTickets();
+  if (!list.length) {
+    el.innerHTML = '<div class="ticket-empty">Пока нет тикетов. Создайте первый 👆</div>';
+    return;
+  }
+  const icons = { open: "🟡", answered: "✅", closed: "⚪" };
+  const labels = { open: "Открыт", answered: "Отвечен", closed: "Закрыт" };
+  el.innerHTML = list.slice().reverse().map(t => `
+    <div class="ticket-card">
+      <div class="ticket-card__top">
+        <span class="ticket-card__id">${icons[t.status] || "🟡"} Тикет №${t.id}</span>
+        <span class="ticket-card__status ${t.status}">${labels[t.status] || t.status}</span>
+      </div>
+      <div class="ticket-card__subject">${escapeHtml(t.subject || "")}</div>
+      <div class="ticket-card__text">${escapeHtml(t.text || "")}</div>
+      ${t.answer ? `<div class="ticket-card__answer">💬 ${escapeHtml(t.answer)}</div>` : ""}
+    </div>
+  `).join("");
+}
+
+function openTelegramLink(url) {
+  if (tg) { try { tg.openLink(url); return; } catch (e) {} }
+  window.open(url, "_blank");
+}
+
 function initSupport() {
   const btn = document.getElementById("support-btn");
   const sheet = document.getElementById("support-sheet");
   const close = document.getElementById("support-close");
   const backdrop = document.getElementById("support-backdrop");
-  const link = document.getElementById("support-telegram");
   if (!btn || !sheet) return;
 
   const open = () => {
     sheet.classList.remove("hidden");
+    renderTicketList();
+    updateTicketCount();
     if (tgSupports("HapticFeedback") && tg?.HapticFeedback) { try { tg.HapticFeedback.impactOccurred("light"); } catch(e){} }
   };
   const hide = () => sheet.classList.add("hidden");
-
   btn.addEventListener("click", open);
   if (close) close.addEventListener("click", hide);
   if (backdrop) backdrop.addEventListener("click", hide);
-  // Use in-app Telegram link when inside Telegram
-  if (link) link.addEventListener("click", (e) => {
-    e.preventDefault();
-    if (tg) tg.openLink(TELEGRAM_URL);
-    else window.open(TELEGRAM_URL, "_blank");
+
+  // Tabs
+  document.querySelectorAll(".ticket-tab").forEach(tab => {
+    tab.addEventListener("click", () => {
+      document.querySelectorAll(".ticket-tab").forEach(t => t.classList.remove("active"));
+      tab.classList.add("active");
+      const which = tab.dataset.tab;
+      const newContent = document.getElementById("ticket-tab-new");
+      const myContent = document.getElementById("ticket-tab-my");
+      if (which === "new") { newContent.classList.remove("hidden"); myContent.classList.add("hidden"); }
+      else { newContent.classList.add("hidden"); myContent.classList.remove("hidden"); renderTicketList(); }
+    });
   });
+
+  // Submit ticket → deep-link into bot which creates it
+  const submit = document.getElementById("ticket-submit");
+  if (submit) submit.addEventListener("click", () => {
+    const category = document.getElementById("ticket-category").value;
+    const subject = document.getElementById("ticket-subject").value.trim();
+    const text = document.getElementById("ticket-text").value.trim();
+    if (!text && !subject) {
+      if (tg) tg.showAlert("Введите сообщение"); else alert("Введите сообщение");
+      return;
+    }
+    const list = loadTickets();
+    const tid = list.length ? Math.max(...list.map(t => t.id)) + 1 : 1;
+    list.push({
+      id: tid,
+      subject: subject || text.substring(0, 50),
+      text: text || subject,
+      category, status: "open", created_at: new Date().toISOString(),
+    });
+    saveTickets(list);
+    renderTicketList();
+
+    const payload = btoa(unescape(encodeURIComponent(JSON.stringify({ text: text || subject, category, subject }))))
+      .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    const link = `https://t.me/foodAi1_bot?start=ticket_${payload}`;
+    openTelegramLink(link);
+
+    // clear form
+    document.getElementById("ticket-subject").value = "";
+    document.getElementById("ticket-text").value = "";
+    // switch to "my" tab
+    const myTab = document.querySelector('.ticket-tab[data-tab="my"]');
+    if (myTab) myTab.click();
+  });
+
+  // Open bot button
+  const openBot = document.getElementById("ticket-open-bot");
+  if (openBot) openBot.addEventListener("click", () => openTelegramLink("https://t.me/foodAi1_bot"));
+
+  // If returning from bot with ticket created flag, refresh statuses
+  try {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get("tickets") === "1") {
+      // keep local list; statuses are reflected in bot chat
+      const list = loadTickets();
+      if (list.length) list[list.length - 1].status = "open";
+      saveTickets(list);
+      setTimeout(() => open(), 600);
+    }
+  } catch (e) {}
 }
 
 // ---------- Splash particles ----------

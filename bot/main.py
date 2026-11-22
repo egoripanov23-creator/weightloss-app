@@ -1,10 +1,12 @@
 """Telegram-бот для AI WeightLoss Mini App + менеджер + тикеты."""
 
 import asyncio
+import base64
 import json
 import logging
 import os
 from datetime import datetime
+from urllib.parse import urlencode
 
 from aiogram import Bot, Dispatcher, F
 from aiogram.client.default import DefaultBotProperties
@@ -54,6 +56,21 @@ def save_tickets(tickets):
 
 def next_ticket_id(tickets):
     return max([t.get("id", 0) for t in tickets], default=0) + 1
+
+
+TICKET_CATEGORIES = {
+    "bug": "🐛 Проблема / баг",
+    "question": "❓ Вопрос по диете",
+    "payment": "💳 Оплата / доступ",
+    "feature": "💡 Предложение",
+    "other": "📝 Другое",
+}
+
+TICKET_STATUS = {
+    "open": "🟡 Открыт",
+    "answered": "✅ Отвечен",
+    "closed": "⚪ Закрыт",
+}
 
 
 class TicketStates(StatesGroup):
@@ -113,6 +130,19 @@ async def cmd_start(message, state: FSMContext):
             "нажмите кнопку ниже 👇",
             reply_markup=kb,
         )
+        return
+
+    # Ticket deep-link from Mini App: /start ticket_<base64json>
+    if args.startswith("ticket_"):
+        try:
+            raw = args[7:]
+            raw += "=" * (-len(raw) % 4)
+            payload = json.loads(base64.urlsafe_b64decode(raw).decode("utf-8"))
+            await create_ticket_from_payload(message, payload)
+        except Exception as e:
+            logger.error(f"Ticket deeplink parse error: {e}")
+            await message.answer("Не удалось создать тикет из приложения. Напишите сообщение вручную — я передам менеджеру.")
+            await state.set_state(TicketStates.waiting_message)
         return
 
     await message.answer(
@@ -191,6 +221,85 @@ async def cmd_reply(message):
     await message.answer(f"✅ Ответ отправлен по тикету №{tid}.")
 
 
+@dp.message(Command("close"))
+async def cmd_close(message):
+    """Admin only: /close <ticket_id>"""
+    if message.from_user.id not in ADMIN_IDS:
+        await message.answer("⛔ Только для менеджера.")
+        return
+    parts = message.text.split(maxsplit=1)
+    if len(parts) < 2:
+        await message.answer("Использование: /close <номер тикета>")
+        return
+    try:
+        tid = int(parts[1])
+    except ValueError:
+        await message.answer("Номер тикета должен быть числом.")
+        return
+    tickets = load_tickets()
+    ticket = next((t for t in tickets if t["id"] == tid), None)
+    if not ticket:
+        await message.answer(f"Тикет №{tid} не найден.")
+        return
+    ticket["status"] = "closed"
+    ticket["closed_at"] = datetime.now().isoformat()
+    save_tickets(tickets)
+    try:
+        await bot.send_message(ticket["user_id"], f"⚪ Тикет №{tid} закрыт менеджером. Спасибо за обращение!")
+    except Exception as e:
+        logger.error(f"Failed to notify user: {e}")
+    await message.answer(f"✅ Тикет №{tid} закрыт.")
+
+
+@dp.message(Command("status"))
+async def cmd_status(message):
+    tickets = load_tickets()
+    mine = [t for t in tickets if t["user_id"] == message.chat.id]
+    if not mine:
+        await message.answer("У вас пока нет тикетов.")
+        return
+    t = mine[-1]
+    await message.answer(
+        f"🎫 <b>Тикет №{t['id']}</b>\n"
+        f"Статус: {TICKET_STATUS.get(t['status'], t['status'])}\n"
+        f"Тема: {t.get('subject','')}\n\n{t['text'][:300]}"
+        + (f"\n\n💬 Ответ: {t['answer']}" if t.get("answer") else ""),
+        reply_markup=manager_keyboard(),
+    )
+
+
+@dp.callback_query(F.data.startswith("admin_reply_"))
+async def cb_admin_reply(callback):
+    if callback.from_user.id not in ADMIN_IDS:
+        await callback.answer("Нет прав", show_alert=True)
+        return
+    tid = int(callback.data.replace("admin_reply_", ""))
+    await callback.message.answer(f"Введите ответ для тикета №{tid} (командой /reply {tid} ваш_ответ):")
+    await callback.answer()
+
+
+@dp.callback_query(F.data.startswith("admin_close_"))
+async def cb_admin_close(callback):
+    if callback.from_user.id not in ADMIN_IDS:
+        await callback.answer("Нет прав", show_alert=True)
+        return
+    tid = int(callback.data.replace("admin_close_", ""))
+    tickets = load_tickets()
+    ticket = next((t for t in tickets if t["id"] == tid), None)
+    if ticket:
+        ticket["status"] = "closed"
+        ticket["closed_at"] = datetime.now().isoformat()
+        save_tickets(tickets)
+        try:
+            await bot.send_message(ticket["user_id"], f"⚪ Тикет №{tid} закрыт менеджером. Спасибо!")
+        except Exception:
+            pass
+        await callback.answer(f"Тикет №{tid} закрыт", show_alert=True)
+        await callback.message.edit_reply_markup(reply_markup=None)
+    else:
+        await callback.answer("Тикет не найден", show_alert=True)
+
+
 @dp.message(Command("alltickets"))
 async def cmd_alltickets(message):
     if message.from_user.id not in ADMIN_IDS:
@@ -216,8 +325,13 @@ async def cmd_help(message):
         "/start — начать\n"
         "/app — открыть Mini App\n"
         "/site — открыть сайт\n"
-        "/manager — связаться с менеджером\n"
+        "/manager — центр поддержки\n"
+        "/ticket <текст> — создать тикет\n"
         "/tickets — мои тикеты\n"
+        "/status — статус последнего тикета\n"
+        "/reply <id> <текст> — ответ (менеджер)\n"
+        "/close <id> — закрыть (менеджер)\n"
+        "/alltickets — все тикеты (менеджер)\n"
         "/help — эта справка",
         reply_markup=main_menu(),
     )
@@ -253,8 +367,8 @@ async def show_my_tickets(message):
     await message.answer(text, reply_markup=manager_keyboard())
 
 
-@dp.message(TicketStates.waiting_message)
-async def ticket_message(message, state: FSMContext):
+async def save_new_ticket(message, text, category="other", subject=""):
+    """Create a ticket and notify admins with action buttons."""
     tickets = load_tickets()
     tid = next_ticket_id(tickets)
     ticket = {
@@ -262,28 +376,72 @@ async def ticket_message(message, state: FSMContext):
         "user_id": message.chat.id,
         "name": f"{message.from_user.first_name} {message.from_user.last_name or ''}".strip(),
         "username": message.from_user.username or "",
-        "text": message.text or "(без текста)",
+        "category": category,
+        "subject": subject or text[:60],
+        "text": text,
         "status": "open",
         "created_at": datetime.now().isoformat(),
     }
     tickets.append(ticket)
     save_tickets(tickets)
-    await state.clear()
+
+    cat_name = TICKET_CATEGORIES.get(category, "📝 Другое")
     await message.answer(
-        f"✅ <b>Тикет №{tid} создан</b>\n\nМенеджер получил ваше обращение и ответит здесь.\n"
+        f"✅ <b>Тикет №{tid} создан</b>\n\n"
+        f"Категория: {cat_name}\nТема: {ticket['subject']}\n\n"
+        "Менеджер получил ваше обращение и ответит здесь.\n"
         "Проверить статус: /tickets",
         reply_markup=main_menu(),
     )
-    # Notify admins
+
+    admin_kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=f"💬 Ответить №{tid}", callback_data=f"admin_reply_{tid}")],
+        [InlineKeyboardButton(text=f"⚪ Закрыть №{tid}", callback_data=f"admin_close_{tid}")],
+    ])
     for admin_id in ADMIN_IDS:
         try:
             await bot.send_message(
                 admin_id,
-                f"🎫 <b>Новый тикет №{tid}</b>\nОт: {ticket['name']} (@{ticket['username']})\n\n{ticket['text'][:400]}\n\n"
-                f"Ответить: /reply {tid} ваш_ответ",
+                f"🎫 <b>Новый тикет №{tid}</b>\n"
+                f"От: {ticket['name']} (@{ticket['username']})\n"
+                f"Категория: {cat_name}\nТема: {ticket['subject']}\n\n"
+                f"{text[:500]}\n\n"
+                f"Ответить: /reply {tid} ваш_ответ\nЗакрыть: /close {tid}",
+                reply_markup=admin_kb,
             )
         except Exception as e:
             logger.error(f"Failed to notify admin {admin_id}: {e}")
+    return ticket
+
+
+async def create_ticket_from_payload(message, payload):
+    text = payload.get("text", "").strip() or "(без текста)"
+    category = payload.get("category", "other")
+    subject = payload.get("subject", "").strip()
+    ticket = await save_new_ticket(message, text, category, subject)
+    # Return link to Mini App "my tickets"
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🎫 Мои тикеты в приложении", web_app=WebAppInfo(url=MINI_APP_URL + "?tickets=1"))],
+    ])
+    await message.answer("Проверить статус тикета можно в приложении 👇", reply_markup=kb)
+
+
+@dp.message(Command("ticket"))
+async def cmd_ticket(message):
+    args = message.text.split(maxsplit=1)
+    if len(args) < 2:
+        cats = "\n".join(f"{v}" for v in TICKET_CATEGORIES.values())
+        await message.answer(
+            "Создать тикет: /ticket <ваш вопрос>\n\nКатегории: " + cats
+        )
+        return
+    await save_new_ticket(message, args[1].strip())
+
+
+@dp.message(TicketStates.waiting_message)
+async def ticket_message(message, state: FSMContext):
+    await state.clear()
+    await save_new_ticket(message, message.text or "(без текста)")
 
 
 # ---------- Registration via deep-link ----------
