@@ -40,11 +40,25 @@ if (window.Telegram?.WebApp?.CloudStorage) {
 
 // ---------- Telegram WebApp ----------
 const tg = window.Telegram?.WebApp;
+// Real Telegram has version >= 6.1 and initData; plain browser has version "6.0"
+const tgSupports = (method) => {
+  if (!tg || !isRealTelegram) return false;
+  try {
+    const v = String(tg.version || "0.0").split(".").map(Number);
+    const major = v[0] || 0, minor = v[1] || 0;
+    if (method === "setHeaderColor" || method === "setBackgroundColor") return major > 6 || (major === 6 && minor >= 1);
+    if (method === "BackButton") return major > 6 || (major === 6 && minor >= 7);
+    if (method === "HapticFeedback") return major > 6 || (major === 6 && minor >= 7);
+    return true;
+  } catch (e) { return false; }
+};
+const isRealTelegram = !!(tg && tg.initData && tg.initData.length > 0);
+
 if (tg) {
-  try { tg.ready(); } catch (e) { console.warn("tg.ready:", e); }
-  try { tg.expand(); } catch (e) { console.warn("tg.expand:", e); }
-  try { tg.setHeaderColor("#0a0f0d"); } catch (e) { console.warn("tg.setHeaderColor:", e); }
-  try { tg.setBackgroundColor("#0a0f0d"); } catch (e) { console.warn("tg.setBackgroundColor:", e); }
+  try { tg.ready(); } catch (e) {}
+  try { tg.expand(); } catch (e) {}
+  if (tgSupports("setHeaderColor")) { try { tg.setHeaderColor("#0a0f0d"); } catch (e) {} }
+  if (tgSupports("setBackgroundColor")) { try { tg.setBackgroundColor("#0a0f0d"); } catch (e) {} }
 }
 
 // ---------- State ----------
@@ -390,10 +404,10 @@ function showScreen(name) {
   target.classList.remove("exit");
   target.classList.add("active");
   state.screen = name;
-  try { if (tg?.BackButton) tg.BackButton.isVisible = (name !== "agreement" && name !== "mealplan"); } catch (e) {}
+  try { if (tgSupports("BackButton") && tg?.BackButton) tg.BackButton.isVisible = (name !== "agreement" && name !== "mealplan"); } catch (e) {}
   
   // Haptic feedback
-  try { if (tg?.HapticFeedback) tg.HapticFeedback.impactOccurred("light"); } catch (e) {}
+  try { if (tgSupports("HapticFeedback") && tg?.HapticFeedback) tg.HapticFeedback.impactOccurred("light"); } catch (e) {}
 }
 
 // ---------- Three.js Background ----------
@@ -1519,7 +1533,7 @@ function renderBottomNav() {
 
 // ---------- Back Button Handler ----------
 try {
-if (tg?.BackButton?.onClick) {
+if (tgSupports("BackButton") && tg?.BackButton?.onClick) {
   tg.BackButton.onClick(() => {
     if (state.screen === "mealplan") {
       // Can't go back from main screen
@@ -1551,7 +1565,7 @@ function initSupport() {
 
   const open = () => {
     sheet.classList.remove("hidden");
-    if (tg?.HapticFeedback) { try { tg.HapticFeedback.impactOccurred("light"); } catch(e){} }
+    if (tgSupports("HapticFeedback") && tg?.HapticFeedback) { try { tg.HapticFeedback.impactOccurred("light"); } catch(e){} }
   };
   const hide = () => sheet.classList.add("hidden");
 
