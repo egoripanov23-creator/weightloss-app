@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>AI WeightLoss — Загрузка</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { height: 100%; overflow: hidden; background: #000; font-family: "Manrope", -apple-system, BlinkMacSystemFont, sans-serif; }
+
+    .splash {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #050a07;
+      overflow: hidden;
+    }
+
+    /* Deep space gradient like the video */
+    .splash::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 80% 60% at 50% 45%, rgba(220,235,225,0.16) 0%, rgba(80,110,90,0.06) 30%, transparent 60%),
+        radial-gradient(ellipse at 50% 120%, rgba(155,225,93,0.08) 0%, transparent 50%),
+        linear-gradient(180deg, #020604 0%, #050a07 60%, #020604 100%);
+    }
+
+    /* Light rays */
+    .ray {
+      position: absolute;
+      top: -30%;
+      left: 50%;
+      width: 60vw;
+      height: 160vh;
+      background: linear-gradient(180deg, rgba(220,240,225,0.10) 0%, rgba(220,240,225,0.03) 50%, transparent 100%);
+      transform: translateX(-50%) rotate(-12deg);
+      filter: blur(40px);
+      animation: ray-sway 12s ease-in-out infinite alternate;
+    }
+    .ray:nth-of-type(2) { transform: translateX(-50%) rotate(10deg); opacity: 0.5; animation-delay: -6s; }
+    @keyframes ray-sway {
+      from { transform: translateX(-50%) rotate(-12deg) scale(1); opacity: 0.7; }
+      to   { transform: translateX(-50%) rotate(-6deg) scale(1.1); opacity: 1; }
+    }
+
+    /* Particles / snow */
+    .particles { position: absolute; inset: 0; }
+    .particle {
+      position: absolute;
+      width: 2px; height: 2px;
+      background: rgba(255,255,255,0.6);
+      border-radius: 50%;
+      animation: drift linear infinite;
+    }
+    @keyframes drift {
+      0%   { transform: translateY(-10vh) translateX(0); opacity: 0; }
+      10%  { opacity: 0.8; }
+      90%  { opacity: 0.6; }
+      100% { transform: translateY(110vh) translateX(40px); opacity: 0; }
+    }
+
+    .scene {
+      position: relative;
+      z-index: 2;
+      text-align: center;
+      animation: fade-in 2s ease both;
+    }
+    @keyframes fade-in { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: none; } }
+
+    .logo-mark {
+      width: 110px; height: 110px;
+      margin: 0 auto 28px;
+      position: relative;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 30%, rgba(155,225,93,0.25), rgba(10,25,15,0.6) 70%);
+      border: 1px solid rgba(155,225,93,0.35);
+      box-shadow: 0 0 60px rgba(155,225,93,0.25), inset 0 0 30px rgba(155,225,93,0.15);
+      display: grid; place-items: center;
+      font-size: 3.2rem;
+      animation: float 5s ease-in-out infinite;
+    }
+    .logo-mark::after {
+      content: "";
+      position: absolute;
+      inset: -12px;
+      border-radius: 50%;
+      border: 1px solid rgba(155,225,93,0.12);
+      animation: ring-pulse 3s ease-out infinite;
+    }
+    @keyframes ring-pulse {
+      0% { transform: scale(0.9); opacity: 0.8; }
+      100% { transform: scale(1.35); opacity: 0; }
+    }
+    @keyframes float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-12px); } }
+
+    h1 {
+      font-size: 2rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      color: #f2f7f3;
+      text-shadow: 0 2px 30px rgba(0,0,0,0.8);
+    }
+    h1 span { color: #9be15d; }
+    .tagline {
+      margin-top: 10px;
+      color: rgba(220,235,225,0.65);
+      font-size: 0.9rem;
+      letter-spacing: 0.05em;
+    }
+
+    .status {
+      margin-top: 40px;
+      font-size: 0.72rem;
+      letter-spacing: 0.25em;
+      text-transform: uppercase;
+      color: rgba(155,225,93,0.7);
+    }
+    .bar {
+      width: 180px; height: 2px;
+      margin: 14px auto 0;
+      background: rgba(255,255,255,0.08);
+      overflow: hidden;
+    }
+    .bar i {
+      display: block; height: 100%; width: 40%;
+      background: linear-gradient(90deg, transparent, #9be15d, transparent);
+      animation: sweep 2.2s ease-in-out infinite;
+    }
+    @keyframes sweep { 0% { transform: translateX(-120%); } 100% { transform: translateX(320%); } }
+
+    /* Skip button bottom-right */
+    .skip {
+      position: absolute;
+      right: 18px;
+      bottom: 18px;
+      z-index: 5;
+      padding: 10px 16px;
+      border-radius: 100px;
+      border: 1px solid rgba(155,225,93,0.3);
+      background: rgba(10,20,14,0.6);
+      backdrop-filter: blur(10px);
+      color: #9be15d;
+      font-family: inherit;
+      font-size: 0.8rem;
+      cursor: pointer;
+      transition: all 0.25s ease;
+    }
+    .skip:hover { background: rgba(155,225,93,0.15); border-color: #9be15d; }
+
+    @media (max-width: 480px) {
+      h1 { font-size: 1.6rem; }
+      .logo-mark { width: 90px; height: 90px; font-size: 2.6rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="splash" id="splash">
+    <div class="ray"></div>
+    <div class="ray"></div>
+    <div class="particles" id="particles"></div>
+
+    <div class="scene">
+      <div class="logo-mark">🥗</div>
+      <h1>AI <span>WeightLoss</span></h1>
+      <p class="tagline">ПЕРСОНАЛЬНЫЙ РАЦИОН · ПОДДЕРЖКА ИИ</p>
+      <div class="status">Загрузка</div>
+      <div class="bar"><i></i></div>
+    </div>
+
+    <button class="skip" id="skip">Пропустить →</button>
+  </div>
+
+  <script>
+    // Generate drifting particles
+    var container = document.getElementById('particles');
+    for (var i = 0; i < 40; i++) {
+      var p = document.createElement('div');
+      p.className = 'particle';
+      p.style.left = Math.random() * 100 + 'vw';
+      p.style.animationDuration = (8 + Math.random() * 10) + 's';
+      p.style.animationDelay = (-Math.random() * 15) + 's';
+      p.style.opacity = 0.3 + Math.random() * 0.5;
+      container.appendChild(p);
+    }
+
+    document.getElementById('skip').addEventListener('click', function () {
+      window.location.href = 'index.html';
+    });
+  </script>
+</body>
+</html>

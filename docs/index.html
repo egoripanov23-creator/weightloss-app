@@ -10,8 +10,9 @@
   <meta property="og:type" content="website">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=6">
+  <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&display=swap">
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+  <link rel="stylesheet" href="styles.css?v=7">
   <script>
     window.addEventListener("unhandledrejection", function(e) {
       if (e.reason && (String(e.reason).includes("WebAppMethodUnsupported") || String(e.reason).includes("CloudStorage"))) {
@@ -37,19 +38,35 @@
     <!-- 3D Background Canvas -->
     <canvas id="bg-canvas"></canvas>
     
+    <!-- Splash / welcome preview (cinematic, until user skips) -->
+    <div id="splash" class="splash">
+      <div class="splash__ray"></div>
+      <div class="splash__ray splash__ray--2"></div>
+      <div class="splash__particles" id="splash-particles"></div>
+      <div class="splash__content">
+        <div class="splash__logo">🥗</div>
+        <h1 class="splash__title">AI <span class="grad">WeightLoss</span></h1>
+        <p class="splash__subtitle">ПЕРСОНАЛЬНЫЙ РАЦИОН · ПОДДЕРЖКА ИИ</p>
+        <div class="splash__status">Загрузка</div>
+        <div class="splash__progress"><div class="splash__progress-fill"></div></div>
+      </div>
+      <button class="splash__skip" id="splash-skip">Пропустить →</button>
+    </div>
+
     <!-- Screens -->
     <div id="screen-agreement" class="screen active"></div>
     <div id="screen-registration" class="screen"></div>
     <div id="screen-settings" class="screen"></div>
     <div id="screen-mealplan" class="screen"></div>
     <div id="screen-tracker" class="screen"></div>
+    <div id="screen-chat" class="screen"></div>
   </div>
 
-  <!-- Three.js -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-  <!-- Chart.js -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-  <!-- App -->
-  <script src="app.js?v=6"></script>
+  <!-- Three.js (deferred, 3D background) -->
+  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <!-- Chart.js (deferred, weight chart) -->
+  <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <!-- App (deferred, runs after libs) -->
+  <script defer src="app.js?v=7"></script>
 </body>
 </html>

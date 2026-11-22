@@ -52,9 +52,14 @@ const state = {
   weightHistory: [],
   usedMeals: [],      // names of all dishes ever generated — never repeat
   generationCount: 0,
+  chatMessages: [],
   aiMessages: [],
   isLoading: false,
 };
+
+// ---------- Navigation links ----------
+const TELEGRAM_URL = "https://t.me/foodAi1_bot";
+const SITE_URL = "https://egoripanov23-creator.github.io/weightloss-app/";
 
 // ---------- Telegram Cloud Storage helpers ----------
 // Check if running inside actual Telegram (not browser)
@@ -772,11 +777,13 @@ async function generateMealPlan() {
 - type — ТОЛЬКО русские слова: "Завтрак", "Перекус", "Обед", "Перекус", "Ужин" (НЕ breakfast/lunch/dinner!)
 - name — ПРИДУМАЙ НОВОЕ/original название блюда, не из списка запрещённых
 - weight — строка вида "200 г"
-- recipe — коротко 2-3 шага на русском
+- recipe — ПОДРОБНЫЙ рецепт на русском с структурой:
+  "⏱ Время: X мин\n🧺 Ингредиенты: ...\n👨‍🍳 Приготовление:\n1. ...\n2. ...\n3. ...\n💡 Совет: ..."
+  Опиши каждый шаг понятно (как для новичка), укажи точные граммы ингредиентов и температуру/режим если нужно
 - 5 приёмов пищи, дефицит ~500 ккал
 
 Формат (только JSON):
-{"meals":[{"type":"Завтрак","name":"Блюдо","weight":"200 г","calories":350,"protein":25,"fat":10,"carbs":40,"recipe":"1. Шаг\\n2. Шаг"}],"total":{"calories":1500,"protein":100,"fat":50,"carbs":150},"tip":"Совет на русском"}`;
+{"meals":[{"type":"Завтрак","name":"Блюдо","weight":"200 г","calories":350,"protein":25,"fat":10,"carbs":40,"recipe":"⏱ Время: 15 мин\\n🧺 Ингредиенты: курица 150г, рис 50г...\\n👨‍🍳 Приготовление:\\n1. ...\\n2. ...\\n💡 Совет: ..."}],"total":{"calories":1500,"protein":100,"fat":50,"carbs":150},"tip":"Совет на русском"}`;
 
     try {
       const candidate = await requestPlan(prompt, 0.9 + attempt * 0.05);
@@ -857,8 +864,8 @@ function renderMealPlan() {
           </div>
           ${m.recipe ? `
             <details class="meal-card__recipe">
-              <summary>📖 Рецепт приготовления</summary>
-              <div class="meal-card__recipe-text">${m.recipe}</div>
+              <summary>📖 Подробный рецепт приготовления</summary>
+              <div class="recipe-detail">${m.recipe}</div>
             </details>
           ` : ""}
         </div>
@@ -869,11 +876,28 @@ function renderMealPlan() {
       <div style="display: flex; gap: 12px; margin-top: 20px;">
         <button class="btn btn-ghost btn-block" id="btn-regenerate">🔄 Составить ещё раз</button>
       </div>
+      <button class="btn btn-primary btn-block" id="btn-open-chat" style="margin-top: 12px;">💬 Спросить ИИ о рационе</button>
+      <div class="cross-links">
+        ${isTelegram
+          ? `<button class="btn btn-ghost" id="btn-goto-site">🌐 Открыть сайт</button>`
+          : `<button class="btn btn-ghost" id="btn-goto-telegram">📱 Перейти в Telegram</button>`}
+      </div>
     </div>
   `;
 
   document.getElementById("btn-regenerate").addEventListener("click", () => {
     generateMealPlan();
+  });
+  document.getElementById("btn-open-chat").addEventListener("click", () => {
+    renderChat(); showScreen("chat");
+  });
+  const gotoSite = document.getElementById("btn-goto-site");
+  if (gotoSite) gotoSite.addEventListener("click", () => {
+    if (tg) tg.openLink(SITE_URL); else window.open(SITE_URL, "_blank");
+  });
+  const gotoTelegram = document.getElementById("btn-goto-telegram");
+  if (gotoTelegram) gotoTelegram.addEventListener("click", () => {
+    if (tg) tg.openLink(TELEGRAM_URL); else window.open(TELEGRAM_URL, "_blank");
   });
 }
 
@@ -969,6 +993,11 @@ function renderTracker() {
         <span id="ai-support-text"></span>
       </div>
 
+      <button class="btn btn-ghost btn-block" id="btn-analyze-weight" style="margin-top: 12px;">📊 Проанализировать прогресс с ИИ</button>
+      <div id="ai-analysis" class="analysis-block hidden">
+        <span id="ai-analysis-text"></span>
+      </div>
+
       <h3 style="margin-bottom: 12px;">История</h3>
       <div class="weight-history" id="weight-history">
         ${history.length === 0 ? '<p style="text-align: center; color: var(--muted);">Пока нет записей</p>' : 
@@ -992,6 +1021,9 @@ function renderTracker() {
 
   // Chart
   renderWeightChart(history);
+
+  const analyzeBtn = document.getElementById("btn-analyze-weight");
+  if (analyzeBtn) analyzeBtn.addEventListener("click", analyzeWeightProgress);
 
   // Save weight handler
   document.getElementById("btn-save-weight").addEventListener("click", async () => {
@@ -1119,6 +1151,137 @@ function renderWeightChart(history) {
   });
 }
 
+// ---------- AI Chat ----------
+const CHAT_SYSTEM = `Ты — эксперт AI WeightLoss: диетолог, нутрициолог и тренер по похудению.
+Отвечай ТОЛЬКО на вопросы по темам: похудение, диета, питание, продукты, напитки, калории, БЖУ, рецепты, физические упражнения, образ жизни, вес, мотивация.
+Если вопрос НЕ по теме (политика, программы, личные данные, медицина не связанная с весом, и т.п.) — вежливо скажи: "Я специалист по похудению и питанию — давай лучше обсудим рацион, продукты или тренировки 💚" и ничего больше.
+Отвечай кратко (2-5 предложений), по-дружески, на русском. Будь конкретным и полезным. Не выдумывай медицинские факты. При вопросах про здоровье напоминай проконсультироваться с врачом.`;
+
+function renderChat() {
+  const el = document.getElementById("screen-chat");
+  const msgs = state.chatMessages || [];
+  const suggestions = [
+    "Как ускорить похудение?",
+    "Что можно пить?",
+    "Как не срываться на сладкое?",
+    "Сколько белка нужно в день?",
+    "Лучшие продукты для веса",
+  ];
+  el.innerHTML = `
+    <div class="chat-wrap">
+      <div class="chat-header">
+        <span class="chat-header__icon">🤖</span>
+        <h2>Чат с <span class="grad">ИИ-диетологом</span></h2>
+        <p style="color:var(--muted);font-size:0.75rem;">Спроси о диете, продуктах, напитках и похудении</p>
+      </div>
+      <div class="chat-messages" id="chat-messages">
+        ${msgs.length ? msgs.map(m => `
+          <div class="chat-msg ${m.role}">${escapeHtml(m.text)}</div>
+        `).join("") : `
+          <div class="chat-msg ai">Привет! Я твой ИИ-диетолог 💚 Спроси меня о рационе, продуктах, напитках или тренировках — помогу с советом!</div>
+        `}
+      </div>
+      <div class="chat-suggestions" id="chat-suggestions">
+        ${suggestions.map(s => `<button class="chat-chip" data-q="${escapeHtml(s)}">${escapeHtml(s)}</button>`).join("")}
+      </div>
+      <div class="chat-input-row">
+        <input type="text" class="chat-input" id="chat-input" placeholder="Напиши вопрос..." autocomplete="off">
+        <button class="chat-send" id="chat-send">➤</button>
+      </div>
+    </div>
+  `;
+
+  const messagesEl = document.getElementById("chat-messages");
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+
+  document.querySelectorAll("#chat-suggestions .chat-chip").forEach(chip => {
+    chip.addEventListener("click", () => sendChatMessage(chip.dataset.q));
+  });
+  const input = document.getElementById("chat-input");
+  document.getElementById("chat-send").addEventListener("click", () => {
+    const q = input.value.trim();
+    if (q) sendChatMessage(q);
+  });
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { const q = input.value.trim(); if (q) sendChatMessage(q); }
+  });
+}
+
+function escapeHtml(str) {
+  return String(str).replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;" }[c]));
+}
+
+async function sendChatMessage(text) {
+  const input = document.getElementById("chat-input");
+  if (input) input.value = "";
+  state.chatMessages = state.chatMessages || [];
+  state.chatMessages.push({ role: "user", text });
+  const messagesEl = document.getElementById("chat-messages");
+  if (messagesEl) {
+    messagesEl.insertAdjacentHTML("beforeend", `<div class="chat-msg user">${escapeHtml(text)}</div>`);
+    messagesEl.insertAdjacentHTML("beforeend", `<div class="chat-typing" id="chat-typing"><span></span><span></span><span></span></div>`);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+  await storageSet("chatMessages", state.chatMessages);
+
+  const context = state.mealPlan
+    ? `\n\nТекущий рацион пользователя: ${state.mealPlan.meals?.map(m => m.name).join(", ")}.`
+    : "";
+  const s = state.settings;
+  const profile = s ? `\n\nПрофиль: вес ${s.weight}кг, рост ${s.height}см, ${s.age}лет, цель ${s.targetWeight}кг.` : "";
+
+  const response = await aiChat([
+    { role: "system", content: CHAT_SYSTEM },
+    { role: "user", content: text + context + profile },
+  ], 0.7);
+
+  const typing = document.getElementById("chat-typing");
+  if (typing) typing.remove();
+  const answer = response || "Извини, не смог ответить. Попробуй ещё раз 🙏";
+  state.chatMessages.push({ role: "ai", text: answer });
+  await storageSet("chatMessages", state.chatMessages);
+  if (messagesEl) {
+    messagesEl.insertAdjacentHTML("beforeend", `<div class="chat-msg ai">${escapeHtml(answer)}</div>`);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+}
+
+// ---------- AI Weight Analysis ----------
+async function analyzeWeightProgress() {
+  const s = state.settings;
+  const history = [...(state.weightHistory || [])].sort((a,b) => a.date.localeCompare(b.date));
+  if (history.length < 2) {
+    if (tg) tg.showAlert("Нужно минимум 2 записи веса для анализа");
+    else alert("Нужно минимум 2 записи веса для анализа");
+    return;
+  }
+  const block = document.getElementById("ai-analysis");
+  const textEl = document.getElementById("ai-analysis-text");
+  if (block) block.classList.remove("hidden");
+  if (textEl) textEl.textContent = "Анализирую прогресс...";
+
+  const first = history[0], last = history[history.length-1];
+  const totalChange = (first.weight - last.weight).toFixed(1);
+  const days = Math.round((new Date(last.date) - new Date(first.date)) / 86400000) || 1;
+  const perWeek = ((first.weight - last.weight) / days * 7).toFixed(2);
+  const remaining = (last.weight - s.targetWeight).toFixed(1);
+  const neededWeeks = s.weeks;
+
+  const prompt = `Ты — AI-коуч по похудению. Проанализируй прогресс и дай краткий отчёт (4-6 предложений) на русском.
+Данные:
+- Старт: ${first.weight}кг (${first.date})
+- Сейчас: ${last.weight}кг (${last.date})
+- Изменение: -${totalChange}кг за ${days} дней
+- Скорость: ${perWeek}кг/неделю
+- Цель: ${s.targetWeight}кг, осталось ${remaining}кг за ${neededWeeks} недель
+- Вся история: ${history.map(h => `${h.date}: ${h.weight}кг`).join(", ")}
+
+Оцени: темп похудения (норма 0.5-1кг/нед), есть ли застой, что рекомендуешь (питание/активность), мотивируй. Будь конкретным и тёплым. Ответь только текстом.`;
+
+  const response = await aiChat([{ role: "user", content: prompt }], 0.7);
+  if (textEl) textEl.textContent = response || "Не удалось проанализировать. Попробуй позже.";
+}
+
 async function generateAISupport(currentWeight, previousWeight) {
   const s = state.settings;
   const history = state.weightHistory;
@@ -1167,6 +1330,7 @@ async function init() {
   state.weightHistory = (await storageGet("weightHistory")) || [];
   state.usedMeals = (await storageGet("usedMeals")) || [];
   state.generationCount = (await storageGet("generationCount")) || 0;
+  state.chatMessages = (await storageGet("chatMessages")) || [];
 
   // Check if agreed
   if (!agreed) {
@@ -1210,6 +1374,10 @@ function renderBottomNav() {
       <span class="bottom-nav__item__icon">⚖️</span>
       <span>Вес</span>
     </div>
+    <div class="bottom-nav__item" data-screen="chat">
+      <span class="bottom-nav__item__icon">💬</span>
+      <span>Чат</span>
+    </div>
     <div class="bottom-nav__item" data-screen="settings">
       <span class="bottom-nav__item__icon">⚙️</span>
       <span>Настройки</span>
@@ -1224,6 +1392,7 @@ function renderBottomNav() {
       item.classList.add("active");
       if (screen === "mealplan") { renderMealPlan(); showScreen("mealplan"); }
       else if (screen === "tracker") { renderTracker(); showScreen("tracker"); }
+      else if (screen === "chat") { renderChat(); showScreen("chat"); }
       else if (screen === "settings") { renderSettings(); showScreen("settings"); }
     });
   });
@@ -1241,6 +1410,9 @@ if (tg?.BackButton?.onClick) {
     } else if (state.screen === "tracker") {
       renderMealPlan();
       showScreen("mealplan");
+    } else if (state.screen === "chat") {
+      renderMealPlan();
+      showScreen("mealplan");
     } else if (state.screen === "registration") {
       renderAgreement();
       showScreen("agreement");
@@ -1249,11 +1421,41 @@ if (tg?.BackButton?.onClick) {
 }
 } catch (e) { console.warn("BackButton:", e); }
 
+// ---------- Splash particles ----------
+function initSplash() {
+  const c = document.getElementById("splash-particles");
+  if (!c) return;
+  let html = "";
+  for (let i = 0; i < 32; i++) {
+    const left = (Math.random() * 100).toFixed(1);
+    const dur = (8 + Math.random() * 12).toFixed(1);
+    const delay = (-Math.random() * 18).toFixed(1);
+    const op = (0.3 + Math.random() * 0.5).toFixed(2);
+    html += `<i style="left:${left}vw;animation-duration:${dur}s;animation-delay:${delay}s;opacity:${op}"></i>`;
+  }
+  c.innerHTML = html;
+}
+
 // ---------- Start ----------
 document.addEventListener("DOMContentLoaded", () => {
   try {
-    init().catch(err => console.error("Init error:", err));
+    initSplash();
     renderBottomNav();
+    // Splash is shown until the user taps "Пропустить" (goes to agreement)
+    const skip = document.getElementById("splash-skip");
+    const splash = document.getElementById("splash");
+    const dismissSplash = () => {
+      if (!splash) return;
+      splash.classList.add("hide");
+      setTimeout(() => splash.remove(), 700);
+      // Reset to agreement screen on entry
+      renderAgreement();
+      showScreen("agreement");
+    };
+    if (skip) skip.addEventListener("click", dismissSplash);
+
+    // init() runs in background behind the splash so data is ready
+    init().catch(err => console.error("Init error:", err));
   } catch (err) {
     console.error("DOMContentLoaded error:", err);
   }
