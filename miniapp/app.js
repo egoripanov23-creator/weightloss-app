@@ -14,6 +14,14 @@ const KAKISTORE_API_KEY = "REDACTED_AI_KEY";
 const KAKISTORE_MODEL = "gpt-6.1-terra";
 const PROXY_URL = "http://localhost:8080/ai";
 
+// Suppress unhandled promise rejections from Telegram SDK
+window.addEventListener("unhandledrejection", (e) => {
+  if (e.reason?.message?.includes("WebAppMethodUnsupported") || 
+      e.reason?.message?.includes("CloudStorage")) {
+    e.preventDefault();
+  }
+});
+
 // ---------- Telegram WebApp ----------
 const tg = window.Telegram?.WebApp;
 if (tg) {
@@ -35,10 +43,16 @@ const state = {
 };
 
 // ---------- Telegram Cloud Storage helpers ----------
+// Check if running inside actual Telegram (not browser)
+const isTelegram = !!(tg && tg.initData && tg.initData.length > 0);
+
 function cloudGet(key) {
   return new Promise((resolve) => {
+    if (!isTelegram || !tg?.CloudStorage?.getItem) {
+      resolve(null);
+      return;
+    }
     try {
-      if (!tg?.CloudStorage?.getItem) { resolve(null); return; }
       tg.CloudStorage.getItem(key, (err, value) => {
         if (err) { resolve(null); return; }
         try { resolve(JSON.parse(value)); } catch { resolve(value); }
@@ -52,8 +66,11 @@ function cloudGet(key) {
 
 function cloudSet(key, value) {
   return new Promise((resolve) => {
+    if (!isTelegram || !tg?.CloudStorage?.setItem) {
+      resolve(false);
+      return;
+    }
     try {
-      if (!tg?.CloudStorage?.setItem) { resolve(false); return; }
       const str = typeof value === "string" ? value : JSON.stringify(value);
       tg.CloudStorage.setItem(key, str, (err) => {
         resolve(!err);
@@ -75,14 +92,27 @@ function localSet(key, value) {
 
 // ---------- Storage abstraction ----------
 async function storageGet(key) {
-  const cloud = await cloudGet(key);
-  if (cloud !== null) return cloud;
+  if (isTelegram) {
+    try {
+      const cloud = await cloudGet(key);
+      if (cloud !== null) return cloud;
+    } catch (e) {
+      console.warn("storageGet cloud error:", e);
+    }
+  }
   return localGet(key);
 }
 
 async function storageSet(key, value) {
-  const cloudOk = await cloudSet(key, value);
-  if (!cloudOk) localSet(key, value);
+  if (isTelegram) {
+    try {
+      const cloudOk = await cloudSet(key, value);
+      if (cloudOk) return;
+    } catch (e) {
+      console.warn("storageSet cloud error:", e);
+    }
+  }
+  localSet(key, value);
 }
 
 // ---------- AI API ----------
