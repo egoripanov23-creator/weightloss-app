@@ -126,11 +126,12 @@
       overflow: hidden;
     }
     .bar i {
-      display: block; height: 100%; width: 40%;
-      background: linear-gradient(90deg, transparent, #9be15d, transparent);
-      animation: sweep 2.2s ease-in-out infinite;
+      display: block; height: 100%; width: 0%;
+      background: linear-gradient(90deg, #4ade80, #9be15d, #d6ffa8);
+      box-shadow: 0 0 10px rgba(155,225,93,0.6);
+      animation: fill 5s linear forwards;
     }
-    @keyframes sweep { 0% { transform: translateX(-120%); } 100% { transform: translateX(320%); } }
+    @keyframes fill { from { width: 0%; } to { width: 100%; } }
 
     /* Skip button bottom-right */
     .skip {
@@ -187,9 +188,18 @@
       container.appendChild(p);
     }
 
-    document.getElementById('skip').addEventListener('click', function () {
-      window.location.href = 'index.html';
-    });
+    var done = false;
+    function go() {
+      if (done) return;
+      done = true;
+      var s = document.getElementById('splash');
+      s.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
+      s.style.opacity = '0';
+      s.style.transform = 'scale(1.05)';
+      setTimeout(function () { window.location.href = 'index.html'; }, 500);
+    }
+    document.getElementById('skip').addEventListener('click', go);
+    setTimeout(go, 5000); // auto-continue after 5 seconds
   </script>
 </body>
 </html>

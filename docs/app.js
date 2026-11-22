@@ -1588,18 +1588,22 @@ document.addEventListener("DOMContentLoaded", () => {
     initSplash();
     initSupport();
     renderBottomNav();
-    // Splash is shown until the user taps "Пропустить" (goes to agreement)
+    // Splash shown for 5 seconds (or until "Пропустить"), then auto-continue
     const skip = document.getElementById("splash-skip");
     const splash = document.getElementById("splash");
+    let splashDone = false;
     const dismissSplash = () => {
-      if (!splash) return;
-      splash.classList.add("hide");
-      setTimeout(() => splash.remove(), 700);
-      // Reset to agreement screen on entry
-      renderAgreement();
-      showScreen("agreement");
+      if (splashDone) return;
+      splashDone = true;
+      if (splash) {
+        splash.classList.add("hide");
+        setTimeout(() => splash.remove(), 700);
+      }
+      // init() already routed the correct screen (agreement for new users,
+      // meal plan for returning ones) — just reveal it
     };
     if (skip) skip.addEventListener("click", dismissSplash);
+    setTimeout(dismissSplash, 5000); // auto-continue after 5 seconds
 
     // init() runs in background behind the splash so data is ready
     init().catch(err => console.error("Init error:", err));

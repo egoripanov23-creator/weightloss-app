@@ -1006,11 +1006,12 @@ p {
   overflow: hidden;
 }
 .splash__progress-fill {
-  display: block; height: 100%; width: 40%;
-  background: linear-gradient(90deg, transparent, var(--accent), transparent);
-  animation: sweep 2.2s ease-in-out infinite;
+  display: block; height: 100%; width: 0%;
+  background: linear-gradient(90deg, var(--accent-2), var(--accent), #d6ffa8);
+  box-shadow: 0 0 10px rgba(155,225,93,0.6);
+  animation: splash-fill 5s linear forwards;
 }
-@keyframes sweep { 0% { transform: translateX(-120%); } 100% { transform: translateX(320%); } }
+@keyframes splash-fill { from { width: 0%; } to { width: 100%; } }
 .splash__skip {
   position: absolute;
   right: 18px; bottom: 18px;
