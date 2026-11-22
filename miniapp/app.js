@@ -555,6 +555,7 @@ function renderAgreement() {
         <h3>5. AI-рекомендации</h3>
         <p>Рекомендации генерируются искусственным интеллектом и носят приблизительный характер. Калорийность и БЖУ рассчитываются на основе стандартных таблиц состава продуктов.</p>
       </div>
+      <div id="social-proof"></div>
       <label class="agreement-checkbox">
         <input type="checkbox" id="agree-checkbox">
         <span>Я принимаю условия пользовательского соглашения</span>
@@ -562,7 +563,8 @@ function renderAgreement() {
       <button class="btn btn-primary btn-block" id="btn-agree" disabled>Продолжить</button>
     </div>
   `;
-  
+  renderSocialProof();
+
   const checkbox = document.getElementById("agree-checkbox");
   const btn = document.getElementById("btn-agree");
   checkbox.addEventListener("change", () => {
@@ -774,6 +776,13 @@ function renderSettings() {
         </div>
       </div>
 
+      <div class="referral-card">
+        <div class="referral-card__title">🎁 Пригласи друга — получи бонус</div>
+        <p style="font-size:0.75rem; color:var(--muted); margin:6px 0;">Поделись своей ссылкой: каждый новый пользователь — +1 к вашему счёту</p>
+        <div class="referral-card__code" id="ref-code">${getRefCode()}</div>
+        <button class="btn btn-ghost btn-block btn-sm" id="btn-share-ref" style="margin-top:8px;">📤 Поделиться ссылкой</button>
+      </div>
+
       <p style="text-align: center; font-size: 0.75rem; color: var(--muted); margin: 16px 0 8px;">
         🤖 ИИ работает автоматически — ключ не нужен
       </p>
@@ -781,6 +790,20 @@ function renderSettings() {
       <button class="btn btn-primary btn-block" id="btn-save-start">💾 Сохранить и начать</button>
     </div>
   `;
+
+  // Share referral link
+  const shareRef = document.getElementById("btn-share-ref");
+  if (shareRef) shareRef.addEventListener("click", () => {
+    const link = `${SITE_URL}?ref=${getRefCode()}`;
+    if (navigator.share) {
+      navigator.share({ title: "AI WeightLoss", text: "Попробуй AI-диетолога — персональный рацион бесплатно!", url: link }).catch(() => {});
+    } else if (tg) {
+      tg.openLink(`https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent("Попробуй AI-диетолога — персональный рацион бесплатно!")}`);
+    } else {
+      navigator.clipboard?.writeText(link);
+      if (tg) tg.showAlert("Ссылка скопирована!"); else alert("Ссылка скопирована: " + link);
+    }
+  });
 
   // Event listeners
   document.querySelectorAll("#products-grid .widget").forEach(w => {
@@ -1707,6 +1730,95 @@ function initSupport() {
   } catch (e) {}
 }
 
+// ---------- Reviews / Feedback ----------
+function loadReviews() {
+  try { return JSON.parse(localStorage.getItem("app_reviews") || "[]"); } catch (e) { return []; }
+}
+function saveReviews(list) { localStorage.setItem("app_reviews", JSON.stringify(list)); }
+
+function getRefCode() {
+  let code = localStorage.getItem("ref_code");
+  if (!code) {
+    code = "u" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    localStorage.setItem("ref_code", code);
+  }
+  return code;
+}
+
+function initReferral() {
+  // Track who invited this user
+  try {
+    const ref = new URLSearchParams(window.location.search).get("ref");
+    if (ref && ref !== getRefCode()) {
+      localStorage.setItem("ref_by", ref);
+      localStorage.setItem("ref_at", new Date().toISOString());
+    }
+  } catch (e) {}
+}
+
+function initReviews() {
+  const btn = document.getElementById("review-btn");
+  const sheet = document.getElementById("review-sheet");
+  const close = document.getElementById("review-close");
+  const backdrop = document.getElementById("review-backdrop");
+  const submit = document.getElementById("review-submit");
+  if (!btn || !sheet) return;
+
+  let rating = 5;
+  const stars = document.querySelectorAll("#review-stars span");
+  const paintStars = () => stars.forEach(s => s.classList.toggle("active", Number(s.dataset.star) <= rating));
+  paintStars();
+  stars.forEach(s => s.addEventListener("click", () => { rating = Number(s.dataset.star); paintStars(); }));
+
+  const open = () => sheet.classList.remove("hidden");
+  const hide = () => sheet.classList.add("hidden");
+  btn.addEventListener("click", open);
+  if (close) close.addEventListener("click", hide);
+  if (backdrop) backdrop.addEventListener("click", hide);
+
+  if (submit) submit.addEventListener("click", () => {
+    const text = document.getElementById("review-text").value.trim();
+    if (!text && rating === 5) {
+      if (tg) tg.showAlert("Напишите пару слов в отзыве"); else alert("Напишите пару слов в отзыве");
+      return;
+    }
+    const list = loadReviews();
+    list.push({ rating, text: text || "Отлично!", date: new Date().toISOString(), ref: getRefCode() });
+    saveReviews(list);
+
+    // Deep-link to bot so the admin gets notified
+    try {
+      const payload = btoa(unescape(encodeURIComponent(JSON.stringify({ type: "review", rating, text: text || "Отлично!" }))))
+        .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+      openTelegramLink(`https://t.me/foodAi1_bot?start=review_${payload}`);
+    } catch (e) {}
+
+    document.getElementById("review-text").value = "";
+    const card = sheet.querySelector(".review-sheet__card");
+    card.innerHTML = `<div class="review-thanks">
+      <div class="review-thanks__icon">🎉</div>
+      <h2>Спасибо за отзыв!</h2>
+      <p style="color:var(--muted); font-size:0.85rem; margin-top:8px;">Вы помогаете нам становиться лучше 💚</p>
+      <button class="btn btn-ghost btn-block" id="review-done" style="margin-top:16px;">Готово</button>
+    </div>`;
+    document.getElementById("review-done").addEventListener("click", hide);
+  });
+}
+
+// Render social proof on agreement screen
+function renderSocialProof() {
+  const reviews = loadReviews();
+  if (!reviews.length) return;
+  const avg = (reviews.reduce((a, r) => a + (r.rating || 5), 0) / reviews.length).toFixed(1);
+  const el = document.getElementById("social-proof");
+  if (el) {
+    el.innerHTML = `<div style="text-align:center; margin: 14px 0; padding: 12px; background: rgba(255,184,107,0.08); border: 1px solid rgba(255,184,107,0.2); border-radius: 12px;">
+      <span style="color:var(--warning); font-size:1.1rem;">⭐ ${avg}</span>
+      <span style="color:var(--muted); font-size:0.8rem; margin-left:8px;">на основе ${reviews.length} отзывов</span>
+    </div>`;
+  }
+}
+
 // ---------- Splash particles ----------
 function initSplash() {
   const c = document.getElementById("splash-particles");
@@ -1727,6 +1839,8 @@ document.addEventListener("DOMContentLoaded", () => {
   try {
     initSplash();
     initSupport();
+    initReviews();
+    initReferral();
     renderBottomNav();
     // Splash shown for 5 seconds (or until "Пропустить"), then auto-continue
     const skip = document.getElementById("splash-skip");

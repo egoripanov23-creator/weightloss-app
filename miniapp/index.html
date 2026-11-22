@@ -18,7 +18,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&display=swap">
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
-  <link rel="stylesheet" href="styles.css?v=18">
+  <link rel="stylesheet" href="styles.css?v=19">
   <script>
     window.addEventListener("unhandledrejection", function(e) {
       if (e.reason && (String(e.reason).includes("WebAppMethodUnsupported") || String(e.reason).includes("CloudStorage"))) {
@@ -72,6 +72,29 @@
       <span class="support-btn__icon">👤</span>
     </button>
 
+    <!-- Feedback (review) floating badge -->
+    <button id="review-btn" class="review-btn" title="Оставить отзыв">
+      <span>⭐</span> Оставить отзыв
+    </button>
+
+    <!-- Review sheet -->
+    <div id="review-sheet" class="review-sheet hidden">
+      <div class="review-sheet__backdrop" id="review-backdrop"></div>
+      <div class="review-sheet__card animate-in">
+        <button class="review-sheet__close" id="review-close">✕</button>
+        <div style="text-align:center; margin-bottom:12px;">
+          <div style="font-size:2.2rem; margin-bottom:6px;">⭐</div>
+          <h2>Ваш отзыв</h2>
+          <p style="color:var(--muted); font-size:0.8rem;">Помогите нам стать лучше — это займёт 10 секунд</p>
+        </div>
+        <div class="review-stars" id="review-stars">
+          <span data-star="1">⭐</span><span data-star="2">⭐</span><span data-star="3">⭐</span><span data-star="4">⭐</span><span data-star="5">⭐</span>
+        </div>
+        <textarea id="review-text" class="form-input" placeholder="Что понравилось? Что улучшить?" rows="3" style="font-size:0.85rem; resize:vertical; margin-bottom:12px;"></textarea>
+        <button class="btn btn-primary btn-block" id="review-submit">📨 Отправить отзыв</button>
+      </div>
+    </div>
+
     <!-- Support / Ticket center -->
     <div id="support-sheet" class="support-sheet hidden">
       <div class="support-sheet__backdrop" id="support-backdrop"></div>
@@ -123,6 +146,6 @@
   <!-- Chart.js (deferred, weight chart) -->
   <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <!-- App (deferred, runs after libs) -->
-  <script defer src="app.js?v=18"></script>
+  <script defer src="app.js?v=19"></script>
 </body>
 </html>

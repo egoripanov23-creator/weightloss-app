@@ -32,6 +32,7 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
 MINI_APP_URL = "https://aifoodbot.duckdns.org/"
 SITE_URL = "https://aifoodbot.duckdns.org/"
 TICKETS_FILE = os.path.join(os.path.dirname(__file__), "tickets.json")
+REVIEWS_FILE = os.path.join(os.path.dirname(__file__), "reviews.json")
 
 # Admin IDs (manager) — ticket notifications are sent here.
 ADMIN_IDS = {5781304476}  # ваш Telegram ID (менеджер тикетов)
@@ -59,6 +60,48 @@ def save_tickets(tickets):
 
 def next_ticket_id(tickets):
     return max([t.get("id", 0) for t in tickets], default=0) + 1
+
+
+# ---------- Review storage ----------
+def load_reviews():
+    try:
+        with open(REVIEWS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return []
+
+
+def save_reviews_file(reviews):
+    with open(REVIEWS_FILE, "w", encoding="utf-8") as f:
+        json.dump(reviews, f, ensure_ascii=False, indent=2)
+
+
+async def save_review(message, payload):
+    reviews = load_reviews()
+    rating = max(1, min(5, int(payload.get("rating", 5))))
+    text = payload.get("text", "").strip() or "Без текста"
+    reviews.append({
+        "rating": rating,
+        "text": text,
+        "user_id": message.chat.id,
+        "name": f"{message.from_user.first_name} {message.from_user.last_name or ''}".strip(),
+        "username": message.from_user.username or "",
+        "date": datetime.now().isoformat(),
+    })
+    save_reviews_file(reviews)
+    await message.answer(
+        f"⭐ Спасибо за отзыв ({rating}/5)!\n\n{text[:200]}\n\n"
+        "Мы обязательно учтём ваше мнение 💚",
+        reply_markup=app_keyboard(),
+    )
+    for admin_id in ADMIN_IDS:
+        try:
+            await bot.send_message(
+                admin_id,
+                f"⭐ <b>Новый отзыв {rating}/5</b>\nОт: {message.from_user.first_name} (@{message.from_user.username})\n\n{text[:500]}",
+            )
+        except Exception as e:
+            logger.error(f"Failed to notify admin about review: {e}")
 
 
 TICKET_CATEGORIES = {
@@ -146,6 +189,17 @@ async def cmd_start(message, state: FSMContext):
             logger.error(f"Ticket deeplink parse error: {e}")
             await message.answer("Не удалось создать тикет из приложения. Напишите сообщение вручную — я передам менеджеру.")
             await state.set_state(TicketStates.waiting_message)
+        return
+
+    # Review deep-link from Mini App: /start review_<base64json>
+    if args.startswith("review_"):
+        try:
+            raw = args[7:]
+            raw += "=" * (-len(raw) % 4)
+            payload = json.loads(base64.urlsafe_b64decode(raw).decode("utf-8"))
+            await save_review(message, payload)
+        except Exception as e:
+            logger.error(f"Review deeplink parse error: {e}")
         return
 
     await message.answer(
@@ -303,6 +357,22 @@ async def cb_admin_close(callback):
         await callback.answer("Тикет не найден", show_alert=True)
 
 
+@dp.message(Command("reviews"))
+async def cmd_reviews(message):
+    if message.from_user.id not in ADMIN_IDS:
+        await message.answer("⛔ Только для менеджера.")
+        return
+    reviews = load_reviews()
+    if not reviews:
+        await message.answer("Отзывов пока нет.")
+        return
+    avg = sum(r.get("rating", 5) for r in reviews) / len(reviews)
+    text = f"⭐ <b>Отзывы: {len(reviews)}, средняя оценка {avg:.1f}/5</b>\n\n"
+    for r in reviews[-20:]:
+        text += f"{'⭐' * r.get('rating',5)} — {r.get('name','?')}\n{r.get('text','')[:150]}\n\n"
+    await message.answer(text)
+
+
 @dp.message(Command("alltickets"))
 async def cmd_alltickets(message):
     if message.from_user.id not in ADMIN_IDS:
@@ -335,6 +405,7 @@ async def cmd_help(message):
         "/reply <id> <текст> — ответ (менеджер)\n"
         "/close <id> — закрыть (менеджер)\n"
         "/alltickets — все тикеты (менеджер)\n"
+        "/reviews — отзывы пользователей (менеджер)\n"
         "/help — эта справка",
         reply_markup=main_menu(),
     )
