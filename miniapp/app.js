@@ -960,6 +960,9 @@ function renderTracker() {
       <div class="chart-container">
         <canvas id="weight-chart"></canvas>
       </div>
+      <p style="text-align: center; font-size: 0.7rem; color: var(--muted); margin: 6px 0 16px;">
+        📈 Все записи на графике: ${history.length}
+      </p>
 
       <div id="ai-support" class="ai-message hidden">
         <span class="ai-message__icon">💚</span>
@@ -1022,9 +1025,29 @@ function renderWeightChart(history) {
     window.weightChartInstance.destroy();
   }
 
-  const labels = history.map(e => e.date.slice(5)); // MM-DD
-  const data = history.map(e => e.weight);
+  // Sort by date, show ALL entries (nothing hidden/truncated)
+  const sorted = [...history].sort((a, b) => a.date.localeCompare(b.date));
+  const labels = sorted.map(e => e.date.slice(5)); // MM-DD
+  const data = sorted.map(e => e.weight);
   const target = state.settings?.targetWeight || 0;
+
+  // Draw a value label above every point so all weights are visible
+  const valueLabels = {
+    id: "valueLabels",
+    afterDatasetsDraw(chart) {
+      const meta = chart.getDatasetMeta(0);
+      const ctx2 = chart.ctx;
+      ctx2.save();
+      ctx2.font = "600 10px Manrope, sans-serif";
+      ctx2.fillStyle = "#9be15d";
+      ctx2.textAlign = "center";
+      ctx2.textBaseline = "bottom";
+      meta.data.forEach((point, i) => {
+        ctx2.fillText(`${data[i]} кг`, point.x, point.y - 8);
+      });
+      ctx2.restore();
+    }
+  };
 
   window.weightChartInstance = new Chart(ctx, {
     type: "line",
@@ -1037,11 +1060,12 @@ function renderWeightChart(history) {
           borderColor: "#9be15d",
           backgroundColor: "rgba(155, 225, 93, 0.1)",
           fill: true,
-          tension: 0.4,
+          tension: 0.3,
           pointBackgroundColor: "#9be15d",
           pointBorderColor: "#0a0f0d",
           pointBorderWidth: 2,
           pointRadius: 5,
+          pointHoverRadius: 7,
         },
         {
           label: "Цель",
@@ -1053,9 +1077,11 @@ function renderWeightChart(history) {
         },
       ],
     },
+    plugins: [valueLabels],
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      animation: { duration: 300 },
       plugins: {
         legend: { display: false },
         tooltip: {
@@ -1064,16 +1090,29 @@ function renderWeightChart(history) {
           bodyColor: "#94a59c",
           borderColor: "rgba(255,255,255,0.1)",
           borderWidth: 1,
+          callbacks: {
+            title: (items) => sorted[items[0].dataIndex]?.date || "",
+            label: (item) => item.datasetIndex === 0
+              ? ` ${item.parsed.y} кг`
+              : ` Цель: ${item.parsed.y} кг`,
+          },
         },
       },
       scales: {
         x: {
           grid: { color: "rgba(255,255,255,0.05)" },
-          ticks: { color: "#94a59c", font: { size: 10 } },
+          ticks: {
+            color: "#94a59c",
+            font: { size: 9 },
+            autoSkip: false,       // never hide dates
+            maxRotation: 60,
+            minRotation: 0,
+          },
         },
         y: {
           grid: { color: "rgba(255,255,255,0.05)" },
           ticks: { color: "#94a59c", font: { size: 10 } },
+          grace: "10%",
         },
       },
     },
