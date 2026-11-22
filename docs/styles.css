@@ -976,7 +976,7 @@ p {
   position: relative;
   z-index: 2;
   text-align: center;
-  animation: slideUp 1.6s ease both;
+  animation: slideUp 1s ease both;
 }
 .splash__logo {
   width: 104px; height: 104px;
@@ -984,13 +984,14 @@ p {
   border-radius: 50%;
   display: grid; place-items: center;
   font-size: 3rem;
-  background: radial-gradient(circle at 35% 30%, rgba(155,225,93,0.25), rgba(10,25,15,0.6) 70%);
-  border: 1px solid rgba(155,225,93,0.35);
-  box-shadow: 0 0 60px rgba(155,225,93,0.2), inset 0 0 30px rgba(155,225,93,0.12);
+  background: radial-gradient(circle at 35% 30%, rgba(155,225,93,0.4), rgba(10,25,15,0.7) 70%);
+  border: 1px solid rgba(155,225,93,0.5);
+  box-shadow: 0 0 80px rgba(155,225,93,0.35), inset 0 0 40px rgba(155,225,93,0.25);
   animation: float 5s ease-in-out infinite;
 }
-.splash__title { font-size: 2rem; font-weight: 800; letter-spacing: -0.02em; }
-.splash__subtitle { color: rgba(220,235,225,0.6); font-size: 0.8rem; letter-spacing: 0.08em; margin-top: 10px; }
+.splash__title { font-size: 2rem; font-weight: 800; letter-spacing: -0.02em; color: #fff; text-shadow: 0 2px 30px rgba(0,0,0,0.9), 0 0 40px rgba(155,225,93,0.25); }
+.splash__title .grad { color: #b6f07d; text-shadow: 0 0 30px rgba(155,225,93,0.5); }
+.splash__subtitle { color: rgba(230,245,235,0.85); font-size: 0.8rem; letter-spacing: 0.08em; margin-top: 10px; }
 .splash__status {
   margin-top: 40px;
   font-size: 0.65rem;
