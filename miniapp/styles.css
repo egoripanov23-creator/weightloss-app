@@ -1343,9 +1343,10 @@ textarea.form-input { font-family: var(--font); }
 .review-btn {
   position: fixed;
   left: 50%;
-  bottom: 104px;
+  bottom: 130px;
   transform: translateX(-50%);
   z-index: 90;  /* below bottom-nav (100) so nav buttons stay clickable */
+  pointer-events: auto;
   display: flex;
   align-items: center;
   gap: 6px;
