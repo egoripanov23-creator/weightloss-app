@@ -69,46 +69,56 @@ async function storageSet(key, value) {
 }
 
 // ---------- AI API ----------
+// Proxy URL (local backend) - change to your server URL
+const PROXY_URL = "http://localhost:8080/ai";
+
 async function aiChat(messages, temperature = 0.7, retries = 2) {
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 30000);
-      
-      const res = await fetch(`${AI_BASE_URL}/chat/completions`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${AI_API_KEY}`,
-        },
-        body: JSON.stringify({
-          model: AI_MODEL,
-          messages: messages,
-          temperature: temperature,
-          max_tokens: 2000,
-        }),
-        signal: controller.signal,
-      });
-      clearTimeout(timeout);
-      
-      if (!res.ok) {
-        const errText = await res.text().catch(() => "");
-        console.error(`AI error ${res.status}:`, errText);
+  // Try proxy first (avoids CORS), then direct API
+  const endpoints = [PROXY_URL, `${AI_BASE_URL}/chat/completions`];
+  
+  for (const endpoint of endpoints) {
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 30000);
+        
+        const headers = { "Content-Type": "application/json" };
+        if (endpoint === `${AI_BASE_URL}/chat/completions`) {
+          headers["Authorization"] = `Bearer ${AI_API_KEY}`;
+        }
+        
+        const res = await fetch(endpoint, {
+          method: "POST",
+          headers: headers,
+          body: JSON.stringify({
+            model: AI_MODEL,
+            messages: messages,
+            temperature: temperature,
+            max_tokens: 2000,
+          }),
+          signal: controller.signal,
+        });
+        clearTimeout(timeout);
+        
+        if (!res.ok) {
+          if (attempt < retries) {
+            await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+            continue;
+          }
+          break; // Try next endpoint
+        }
+        const data = await res.json();
+        const content = data.choices?.[0]?.message?.content || "";
+        if (content) return content;
+        break;
+      } catch (err) {
+        console.error(`AI error (${endpoint}):`, err);
         if (attempt < retries) {
           await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
           continue;
         }
-        return null;
+        break;
       }
-      const data = await res.json();
-      return data.choices?.[0]?.message?.content || "";
-    } catch (err) {
-      console.error("AI error:", err);
-      if (attempt < retries) {
-        await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
-        continue;
-      }
-      return null;
     }
   }
   return null;
@@ -161,10 +171,20 @@ const DIFFICULTY = [
 
 // ---------- Screen Navigation ----------
 function showScreen(name) {
-  document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
-  document.getElementById(`screen-${name}`).classList.add("active");
+  document.querySelectorAll(".screen").forEach(s => {
+    s.classList.remove("active");
+    s.classList.add("exit");
+  });
+  const target = document.getElementById(`screen-${name}`);
+  target.classList.remove("exit");
+  target.classList.add("active");
   state.screen = name;
-  if (tg) tg.BackButton.isVisible = (name !== "agreement");
+  if (tg) tg.BackButton.isVisible = (name !== "agreement" && name !== "mealplan");
+  
+  // Haptic feedback
+  if (tg?.HapticFeedback) {
+    tg.HapticFeedback.impactOccurred("light");
+  }
 }
 
 // ---------- Three.js Background ----------
@@ -506,7 +526,7 @@ async function generateMealPlan() {
   const allergies = s.allergies.map(id => ALLERGIES.find(a => a.id === id)?.name).filter(Boolean);
   const diff = DIFFICULTY.find(d => d.id === s.difficulty);
 
-  const prompt = `Ты — профессиональный диетолог. Составь персональный план питания на один день для пользователя.
+  const prompt = `Ты — профессиональный диетолог. Составь НОВЫЙ персональный план питания на один день для пользователя. Не повторяй предыдущие блюда.
 
 Данные пользователя:
 - Текущий вес: ${s.weight} кг
@@ -525,11 +545,12 @@ async function generateMealPlan() {
 4. Используй любимые продукты пользователя
 5. Исключи аллергены
 6. Учитывай сложность диеты
-7. Ответь ТОЛЬКО в JSON формате:
+7. Для каждого блюда добавь поле "recipe" — пошаговый рецепт приготовления (3-5 шагов, кратко)
+8. Ответь ТОЛЬКО в JSON формате:
 
 {
   "meals": [
-    {"type": "Завтрак", "name": "Название блюда", "weight": "200 г", "calories": 350, "protein": 25, "fat": 10, "carbs": 40},
+    {"type": "Завтрак", "name": "Название блюда", "weight": "200 г", "calories": 350, "protein": 25, "fat": 10, "carbs": 40, "recipe": "1. Шаг первый\\n2. Шаг второй\\n3. Шаг третий"},
     ...
   ],
   "total": {"calories": 1500, "protein": 100, "fat": 50, "carbs": 150},
@@ -592,8 +613,8 @@ function renderMealPlan() {
         </div>
       </div>
 
-      ${plan.meals?.map(m => `
-        <div class="meal-card">
+      ${plan.meals?.map((m, idx) => `
+        <div class="meal-card" style="animation-delay: ${idx * 0.1}s;">
           <div class="meal-card__header">
             <div class="meal-card__title">${mealIcons[m.type] || "🍴"} ${m.type}</div>
             <div class="meal-card__calories">${m.calories} ккал</div>
@@ -607,6 +628,12 @@ function renderMealPlan() {
             <span>Ж ${m.fat}г</span>
             <span>У ${m.carbs}г</span>
           </div>
+          ${m.recipe ? `
+            <details class="meal-card__recipe">
+              <summary>📖 Рецепт приготовления</summary>
+              <div class="meal-card__recipe-text">${m.recipe}</div>
+            </details>
+          ` : ""}
         </div>
       `).join("") || ""}
 
