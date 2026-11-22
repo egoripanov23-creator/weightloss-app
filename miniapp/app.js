@@ -5,7 +5,8 @@
 // ---------- Configuration ----------
 // AI Provider: Gemini (supports CORS from browser, free tier)
 // Get free API key: https://aistudio.google.com/apikey
-const GEMINI_MODEL = "gemini-3.8-flash";
+// Try multiple models in order (fallback if one is overloaded)
+const GEMINI_MODELS = ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite", "gemini-flash-latest"];
 const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta";
 
 // Fallback: kakistore (requires proxy for CORS)
@@ -135,68 +136,78 @@ async function aiChat(messages, temperature = 0.7, retries = 2) {
   const geminiKey = (state.settings?.geminiKey || localStorage.getItem("gemini_api_key") || "").trim().replace(/\s/g, "");
   
   if (geminiKey) {
-    for (let attempt = 0; attempt <= retries; attempt++) {
-      try {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 30000);
-        
-        // Convert OpenAI messages format to Gemini format
-        const systemMsg = messages.find(m => m.role === "system");
-        const userMsgs = messages.filter(m => m.role !== "system");
-        const geminiContents = userMsgs.map(m => ({
-          role: m.role === "assistant" ? "model" : "user",
-          parts: [{ text: m.content }]
-        }));
-        
-        const body = {
-          contents: geminiContents,
-          generationConfig: {
-            temperature: temperature,
-            maxOutputTokens: 2000,
+    // Try each model in order
+    for (const model of GEMINI_MODELS) {
+      for (let attempt = 0; attempt <= retries; attempt++) {
+        try {
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 30000);
+          
+          // Convert OpenAI messages format to Gemini format
+          const systemMsg = messages.find(m => m.role === "system");
+          const userMsgs = messages.filter(m => m.role !== "system");
+          const geminiContents = userMsgs.map(m => ({
+            role: m.role === "assistant" ? "model" : "user",
+            parts: [{ text: m.content }]
+          }));
+          
+          const body = {
+            contents: geminiContents,
+            generationConfig: {
+              temperature: temperature,
+              maxOutputTokens: 2000,
+            }
+          };
+          
+          if (systemMsg) {
+            body.systemInstruction = { parts: [{ text: systemMsg.content }] };
           }
-        };
-        
-        if (systemMsg) {
-          body.systemInstruction = { parts: [{ text: systemMsg.content }] };
-        }
-        
-        const res = await fetch(`${GEMINI_BASE_URL}/models/${GEMINI_MODEL}:generateContent?key=${geminiKey}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-          signal: controller.signal,
-        });
-        clearTimeout(timeout);
-        
-        if (!res.ok) {
-          const errText = await res.text().catch(() => "");
-          console.error(`Gemini error ${res.status}:`, errText);
-          try {
-            const errJson = JSON.parse(errText);
-            state.lastApiError = errJson.error?.message || errText;
-          } catch {
-            state.lastApiError = errText;
+          
+          const res = await fetch(`${GEMINI_BASE_URL}/models/${model}:generateContent?key=${geminiKey}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+            signal: controller.signal,
+          });
+          clearTimeout(timeout);
+          
+          if (!res.ok) {
+            const errText = await res.text().catch(() => "");
+            console.error(`Gemini ${model} error ${res.status}:`, errText);
+            try {
+              const errJson = JSON.parse(errText);
+              state.lastApiError = errJson.error?.message || errText;
+            } catch {
+              state.lastApiError = errText;
+            }
+            if (res.status === 400 && errText.includes("API_KEY_INVALID")) {
+              return null; // Invalid key, don't try other models
+            }
+            // 503/429 = overloaded, try next model
+            if (res.status === 503 || res.status === 429) {
+              break; // Try next model
+            }
+            if (attempt < retries) {
+              await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+              continue;
+            }
+            break;
           }
-          if (res.status === 400 && errText.includes("API_KEY_INVALID")) {
-            return null;
+          const data = await res.json();
+          const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+          if (text) {
+            state.lastApiError = null;
+            return text;
           }
+          break;
+        } catch (err) {
+          console.error(`Gemini ${model} error:`, err);
           if (attempt < retries) {
             await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
             continue;
           }
           break;
         }
-        const data = await res.json();
-        const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
-        if (text) return text;
-        break;
-      } catch (err) {
-        console.error("Gemini error:", err);
-        if (attempt < retries) {
-          await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
-          continue;
-        }
-        break;
       }
     }
   }
@@ -940,6 +951,7 @@ function renderMealPlanError() {
           <li>Ключ введён с ошибкой (проверьте пробелы)</li>
           <li>Ключ не активирован (подождите 1-2 мин)</li>
           <li>Превышен лимит запросов (подождите)</li>
+          <li>Модель перегружена (попробуйте позже)</li>
           <li>Нет подключения к интернету</li>
         </ul>
         ${state.lastApiError ? `<p style="font-size: 0.7rem; color: #ff6b6b; margin-bottom: 12px; word-break: break-all;">Ошибка API: ${state.lastApiError}</p>` : ""}
