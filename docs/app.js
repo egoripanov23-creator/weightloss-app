@@ -435,7 +435,7 @@ function showScreen(name) {
   state.screen = name;
   // Hide floating review badge on onboarding screens so it never blocks buttons
   const reviewBadge = document.getElementById("review-btn");
-  if (reviewBadge) reviewBadge.classList.toggle("hidden", ["agreement", "registration"].includes(name));
+  if (reviewBadge) reviewBadge.classList.toggle("hidden", ["agreement", "registration", "mealplan", "settings"].includes(name));
   try { if (tgSupports("BackButton") && tg?.BackButton) tg.BackButton.isVisible = (name !== "agreement" && name !== "mealplan"); } catch (e) {}
   
   // Haptic feedback
@@ -611,27 +611,15 @@ function renderRegistration() {
   const verifyBtn = document.getElementById("btn-verify-telegram");
   if (verifyBtn) {
     verifyBtn.addEventListener("click", () => {
-      // Inside Telegram Mini App — use native requestContact directly
-      if (tg && isTelegram && tg.requestContact) {
-        try {
-          tg.requestContact((contact) => {
-            if (contact) {
-              document.getElementById("reg-phone").value = contact.phone_number;
-              if (!document.getElementById("reg-name").value) {
-                document.getElementById("reg-name").value = contact.first_name + " " + (contact.last_name || "");
-              }
-            }
-          });
-        } catch (e) { console.warn("requestContact:", e); }
-        return;
-      }
-      // On website — go to bot with registration token
+      // Always route through the bot — reliable on both website and Mini App.
+      // tg.requestContact is unreliable across Telegram versions.
       const name = document.getElementById("reg-name").value.trim();
       const token = "r" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
       localStorage.setItem("reg_token", token);
       if (name) localStorage.setItem("reg_name", name);
       const botLink = `https://t.me/foodAi1_bot?start=reg_${token}`;
-      if (tg) tg.openLink(botLink); else window.open(botLink, "_blank");
+      if (tg) { try { tg.openLink(botLink); } catch (e) { window.open(botLink, "_blank"); } }
+      else window.open(botLink, "_blank");
     });
   }
 
@@ -678,6 +666,8 @@ function renderSettings() {
         <h1>Настройки</h1>
         <p>Заполните данные для персонального плана</p>
       </div>
+
+      <button class="btn btn-primary btn-block save-start-btn" style="margin-bottom:16px;">💾 Сохранить и начать</button>
 
       <div class="form-group">
         <label class="form-label">Текущий вес (кг)</label>
@@ -790,7 +780,7 @@ function renderSettings() {
         🤖 ИИ работает автоматически — ключ не нужен
       </p>
 
-      <button class="btn btn-primary btn-block" id="btn-save-start">💾 Сохранить и начать</button>
+      <button class="btn btn-primary btn-block save-start-btn" id="btn-save-start">💾 Сохранить и начать</button>
     </div>
   `;
 
@@ -830,7 +820,7 @@ function renderSettings() {
     });
   });
 
-  document.getElementById("btn-save-start").addEventListener("click", async () => {
+  document.querySelectorAll(".save-start-btn").forEach(saveBtn => saveBtn.addEventListener("click", async () => {
     const weight = parseFloat(document.getElementById("set-weight").value);
     const height = parseFloat(document.getElementById("set-height").value);
     const age = parseInt(document.getElementById("set-age").value);
@@ -864,7 +854,7 @@ function renderSettings() {
     renderMealPlan();
     showScreen("mealplan");
     generateMealPlan();
-  });
+  }));
 }
 
 // ---------- Meal Plan ----------
