@@ -171,6 +171,12 @@ async function aiChat(messages, temperature = 0.7, retries = 2) {
         if (!res.ok) {
           const errText = await res.text().catch(() => "");
           console.error(`Gemini error ${res.status}:`, errText);
+          try {
+            const errJson = JSON.parse(errText);
+            state.lastApiError = errJson.error?.message || errText;
+          } catch {
+            state.lastApiError = errText;
+          }
           if (res.status === 400 && errText.includes("API_KEY_INVALID")) {
             return null;
           }
@@ -824,6 +830,8 @@ async function generateMealPlan() {
     renderMealPlan();
   } catch (err) {
     console.error("Meal plan error:", err);
+    // Store last error for display
+    state.lastError = err?.message || String(err);
     renderMealPlanError();
   } finally {
     state.isLoading = false;
@@ -934,6 +942,7 @@ function renderMealPlanError() {
           <li>Превышен лимит запросов (подождите)</li>
           <li>Нет подключения к интернету</li>
         </ul>
+        ${state.lastApiError ? `<p style="font-size: 0.7rem; color: #ff6b6b; margin-bottom: 12px; word-break: break-all;">Ошибка API: ${state.lastApiError}</p>` : ""}
         <p style="font-size: 0.75rem; color: var(--muted); margin-bottom: 12px;">
           Проверьте ключ на <a href="https://aistudio.google.com/apikey" target="_blank" style="color: var(--accent);">aistudio.google.com/apikey</a>
         </p>
