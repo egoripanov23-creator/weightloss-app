@@ -8,6 +8,9 @@ import os
 from datetime import datetime
 from urllib.parse import urlencode
 
+from dotenv import load_dotenv
+load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
+
 from aiogram import Bot, Dispatcher, F
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
@@ -25,7 +28,7 @@ from aiogram.types import (
     Contact,
 )
 
-BOT_TOKEN = "REDACTED_BOT_TOKEN"
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
 MINI_APP_URL = "https://aifoodbot.duckdns.org/"
 SITE_URL = "https://aifoodbot.duckdns.org/"
 TICKETS_FILE = os.path.join(os.path.dirname(__file__), "tickets.json")

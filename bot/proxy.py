@@ -2,13 +2,17 @@
 
 import asyncio
 import logging
+import os
 from aiohttp import web, ClientSession
+from dotenv import load_dotenv
+
+load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("proxy")
 
 AI_BASE_URL = "https://api.baza-ai.org/v1"
-AI_API_KEY = "REDACTED_AI_KEY"
+AI_API_KEY = os.environ.get("AI_API_KEY", "")
 AI_MODEL = "gpt-6.1-terra"
 
 
