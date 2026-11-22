@@ -44,11 +44,7 @@ async def start(message):
         "• ⚖️ Отслеживание веса с графиком\n"
         "• 💚 AI-поддержка и мотивация\n"
         "• 🎯 Персональные цели и планы\n\n"
-        "📌 <b>Для работы ИИ нужен бесплатный ключ Google Gemini:</b>\n"
-        "1. Открой https://aistudio.google.com/apikey\n"
-        "2. Войди через Google\n"
-        "3. Нажми 'Create API Key'\n"
-        "4. Вставь ключ в настройках приложения\n\n"
+        "🤖 ИИ работает автоматически — ключ и регистрация не нужны!\n\n"
         "Для начала работы поделитесь номером телефона:",
         reply_markup=keyboard,
     )
@@ -83,8 +79,6 @@ async def handle_contact(message):
     await message.answer(
         f"✅ Спасибо, {contact.first_name}!\n\n"
         f"Ваш номер: {phone}\n\n"
-        "📌 Не забудьте вставить ключ Gemini в настройках приложения!\n"
-        "Получить ключ: https://aistudio.google.com/apikey\n\n"
         "Откройте приложение для составления рациона:",
         reply_markup=keyboard,
     )
