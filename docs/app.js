@@ -132,7 +132,7 @@ async function storageSet(key, value) {
 // ---------- AI API ----------
 async function aiChat(messages, temperature = 0.7, retries = 2) {
   // Try Gemini first (supports CORS from browser, free tier)
-  const geminiKey = state.settings?.geminiKey || localStorage.getItem("gemini_api_key") || "";
+  const geminiKey = (state.settings?.geminiKey || localStorage.getItem("gemini_api_key") || "").trim().replace(/\s/g, "");
   
   if (geminiKey) {
     for (let attempt = 0; attempt <= retries; attempt++) {
@@ -705,7 +705,8 @@ function renderSettings() {
         <p style="font-size: 0.75rem; color: var(--muted); margin-bottom: 8px;">
           Получите бесплатный ключ на <a href="https://aistudio.google.com/apikey" target="_blank" style="color: var(--accent);">aistudio.google.com/apikey</a>
         </p>
-        <input type="text" class="form-input" id="set-gemini-key" placeholder="AIzaSy..." value="${s.geminiKey || localStorage.getItem("gemini_api_key") || ""}">
+        <input type="text" class="form-input" id="set-gemini-key" placeholder="AIzaSy..." value="${s.geminiKey || localStorage.getItem("gemini_api_key") || ""}" autocomplete="off" spellcheck="false">
+        <p style="font-size: 0.7rem; color: var(--muted); margin-top: 4px;">Ключ начинается с AIzaSy... (без пробелов)</p>
       </div>
 
       <button class="btn btn-primary btn-block" id="btn-save-start">💾 Сохранить и начать</button>
@@ -742,7 +743,7 @@ function renderSettings() {
     const products = [...document.querySelectorAll("#products-grid .widget.selected")].map(w => w.dataset.product);
     const allergies = [...document.querySelectorAll("#allergies-grid .allergy-tag.selected")].map(t => t.dataset.allergy);
     const diff = document.querySelector("#difficulty-grid .difficulty-option.selected")?.dataset.difficulty || "medium";
-    const geminiKey = document.getElementById("set-gemini-key").value.trim();
+    const geminiKey = document.getElementById("set-gemini-key").value.trim().replace(/\\s/g, "");
 
     state.settings = {
       weight, height, age, targetWeight, weeks, products, allergies, difficulty: diff,
@@ -928,10 +929,14 @@ function renderMealPlanError() {
       ` : `
         <p style="margin-bottom: 12px;">Возможные причины:</p>
         <ul style="text-align: left; color: var(--muted); font-size: 0.85rem; margin-bottom: 20px; padding-left: 20px;">
-          <li>Неверный API ключ</li>
+          <li>Ключ введён с ошибкой (проверьте пробелы)</li>
+          <li>Ключ не активирован (подождите 1-2 мин)</li>
+          <li>Превышен лимит запросов (подождите)</li>
           <li>Нет подключения к интернету</li>
-          <li>AI-сервер временно недоступен</li>
         </ul>
+        <p style="font-size: 0.75rem; color: var(--muted); margin-bottom: 12px;">
+          Проверьте ключ на <a href="https://aistudio.google.com/apikey" target="_blank" style="color: var(--accent);">aistudio.google.com/apikey</a>
+        </p>
       `}
       <div style="display: flex; gap: 10px;">
         <button class="btn btn-primary" style="flex: 1;" id="btn-retry">🔄 Попробовать снова</button>
