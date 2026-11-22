@@ -1156,3 +1156,48 @@ p {
 /* Cross-links */
 .cross-links { display: flex; gap: 10px; margin-top: 16px; }
 .cross-links .btn { flex: 1; font-size: 0.8rem; }
+
+/* Support button (top-right) */
+.support-btn {
+  position: fixed;
+  top: 14px;
+  right: 14px;
+  z-index: 150;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 1px solid rgba(155,225,93,0.35);
+  background: rgba(10,20,14,0.75);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4), 0 0 16px rgba(155,225,93,0.15);
+  transition: all var(--transition);
+}
+.support-btn:hover { background: rgba(155,225,93,0.18); border-color: var(--accent); transform: scale(1.08); }
+.support-btn:active { transform: scale(0.94); }
+.support-btn__icon { font-size: 1.25rem; line-height: 1; }
+
+/* Support sheet */
+.support-sheet { position: fixed; inset: 0; z-index: 200; display: flex; align-items: flex-end; justify-content: center; }
+.support-sheet__backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.65); backdrop-filter: blur(4px); }
+.support-sheet__card {
+  position: relative;
+  width: 100%;
+  max-width: 480px;
+  padding: 26px 20px 30px;
+  background: var(--bg-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius) var(--radius) 0 0;
+  box-shadow: 0 -20px 60px rgba(0,0,0,0.6);
+  animation: slideUp 0.35s ease both;
+}
+.support-sheet__close {
+  position: absolute; top: 14px; right: 14px;
+  width: 32px; height: 32px; border-radius: 50%;
+  border: 1px solid var(--border); background: rgba(255,255,255,0.05);
+  color: var(--muted); cursor: pointer; font-size: 0.9rem;
+}
+.support-sheet__close:hover { color: var(--text); border-color: var(--border-strong); }

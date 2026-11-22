@@ -1449,6 +1449,32 @@ if (tg?.BackButton?.onClick) {
 }
 } catch (e) { console.warn("BackButton:", e); }
 
+// ---------- Support sheet ----------
+function initSupport() {
+  const btn = document.getElementById("support-btn");
+  const sheet = document.getElementById("support-sheet");
+  const close = document.getElementById("support-close");
+  const backdrop = document.getElementById("support-backdrop");
+  const link = document.getElementById("support-telegram");
+  if (!btn || !sheet) return;
+
+  const open = () => {
+    sheet.classList.remove("hidden");
+    if (tg?.HapticFeedback) { try { tg.HapticFeedback.impactOccurred("light"); } catch(e){} }
+  };
+  const hide = () => sheet.classList.add("hidden");
+
+  btn.addEventListener("click", open);
+  if (close) close.addEventListener("click", hide);
+  if (backdrop) backdrop.addEventListener("click", hide);
+  // Use in-app Telegram link when inside Telegram
+  if (link) link.addEventListener("click", (e) => {
+    e.preventDefault();
+    if (tg) tg.openLink(TELEGRAM_URL);
+    else window.open(TELEGRAM_URL, "_blank");
+  });
+}
+
 // ---------- Splash particles ----------
 function initSplash() {
   const c = document.getElementById("splash-particles");
@@ -1468,6 +1494,7 @@ function initSplash() {
 document.addEventListener("DOMContentLoaded", () => {
   try {
     initSplash();
+    initSupport();
     renderBottomNav();
     // Splash is shown until the user taps "Пропустить" (goes to agreement)
     const skip = document.getElementById("splash-skip");
