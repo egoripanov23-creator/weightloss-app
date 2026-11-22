@@ -50,6 +50,8 @@ const state = {
   settings: null,
   mealPlan: null,
   weightHistory: [],
+  usedMeals: [],      // names of all dishes ever generated — never repeat
+  generationCount: 0,
   aiMessages: [],
   isLoading: false,
 };
@@ -706,52 +708,106 @@ function renderSettings() {
 }
 
 // ---------- Meal Plan ----------
+function normalizeDishName(name) {
+  return String(name || "").toLowerCase().replace(/[^a-zа-яё0-9]/gi, "").trim();
+}
+
+function countRepeats(plan) {
+  if (!plan?.meals) return 0;
+  const used = state.usedMeals.map(normalizeDishName);
+  const names = plan.meals.map(m => normalizeDishName(m.name));
+  const oldRepeats = names.filter(n => used.includes(n)).length;
+  // also reject duplicates inside the same day
+  const internalDupes = names.length - new Set(names).size;
+  return oldRepeats + internalDupes;
+}
+
+async function requestPlan(prompt, temperature) {
+  const response = await aiChat([{ role: "user", content: prompt }], temperature);
+  if (!response) throw new Error("Не удалось получить ответ ИИ");
+  let jsonStr = response.trim().replace(/```json?\n?/gi, "").replace(/```/g, "").trim();
+  const start = jsonStr.indexOf("{");
+  const end = jsonStr.lastIndexOf("}");
+  if (start >= 0 && end > start) jsonStr = jsonStr.slice(start, end + 1);
+  const data = normalizeMealPlan(JSON.parse(jsonStr));
+  if (!data.meals || data.meals.length === 0) throw new Error("Пустой план");
+  return data;
+}
+
 async function generateMealPlan() {
   const s = state.settings;
   const products = s.products.map(id => PRODUCTS.find(p => p.id === id)?.name).filter(Boolean);
   const allergies = s.allergies.map(id => ALLERGIES.find(a => a.id === id)?.name).filter(Boolean);
   const diff = DIFFICULTY.find(d => d.id === s.difficulty);
 
-  const prompt = `Ты диетолог. Составь план питания на 1 день. ВАЖНО: отвечай ТОЛЬКО валидным JSON, без текста до и после.
+  state.generationCount += 1;
+  await storageSet("generationCount", state.generationCount);
 
-Данные: вес ${s.weight}кг, рост ${s.height}см, возраст ${s.age}, цель ${s.targetWeight}кг за ${s.weeks}нед. Продукты: ${products.join(", ") || "любые"}. Аллергии: ${allergies.join(", ") || "нет"}. Сложность: ${diff?.name || "средняя"}.
+  const exclude = state.usedMeals.slice(-60);
+  const excludeText = exclude.length
+    ? `\n❌ КАТЕГОРИЧЕСКИ НЕ ПОВТОРЯЙ эти блюда (уже были раньше): ${exclude.join("; ")}. Придумай полностью новые названия и другие способы приготовления.`
+    : "";
+  // Variety clue: different cuisine / technique each time
+  const themes = [
+    "используй запекание и свежие травы",
+    "используй варку на пару и лимон",
+    "используй жарку на сухой сковороде и специи",
+    "используй тушение и коренья",
+    "используй сырые овощи и лёгкие соусы",
+    "используй гриль и пряности",
+  ];
+  const theme = themes[state.generationCount % themes.length];
+
+  let data = null;
+  let lastErr = null;
+  // Up to 3 attempts — keep asking until we get a plan with zero repeats
+  for (let attempt = 0; attempt < 3 && !data; attempt++) {
+    const extraBan = state._lastRejected?.length
+      ? `\n🚫 Особенно НЕ используй: ${state._lastRejected.join("; ")}.` : "";
+    const prompt = `Ты диетолог. Составь НОВЫЙ план питания на 1 день (вариант №${state.generationCount}). Отвечай ТОЛЬКО валидным JSON, без текста до и после.
+
+Данные: вес ${s.weight}кг, рост ${s.height}см, возраст ${s.age}, цель ${s.targetWeight}кг за ${s.weeks}нед. Продукты: ${products.join(", ") || "любые"}. Аллергии: ${allergies.join(", ") || "нет"}. Сложность: ${diff?.name || "средняя"}. Стиль этого варианта: ${theme}.${excludeText}${extraBan}
 
 ПРАВИЛА:
-- type — ТОЛЬКО одно из русских слов: "Завтрак", "Перекус", "Обед", "Перекус", "Ужин" (НЕ breakfast/lunch/dinner!)
+- type — ТОЛЬКО русские слова: "Завтрак", "Перекус", "Обед", "Перекус", "Ужин" (НЕ breakfast/lunch/dinner!)
+- name — ПРИДУМАЙ НОВОЕ/original название блюда, не из списка запрещённых
 - weight — строка вида "200 г"
 - recipe — коротко 2-3 шага на русском
 - 5 приёмов пищи, дефицит ~500 ккал
 
-Формат ответа (только JSON):
+Формат (только JSON):
 {"meals":[{"type":"Завтрак","name":"Блюдо","weight":"200 г","calories":350,"protein":25,"fat":10,"carbs":40,"recipe":"1. Шаг\\n2. Шаг"}],"total":{"calories":1500,"protein":100,"fat":50,"carbs":150},"tip":"Совет на русском"}`;
 
-  state.isLoading = true;
-  renderMealPlanLoading();
-
-  try {
-    const response = await aiChat([{ role: "user", content: prompt }], 0.7);
-    if (!response) throw new Error("Не удалось получить ответ ИИ");
-
-    // Extract JSON even if wrapped in markdown or extra text
-    let jsonStr = response.trim().replace(/```json?\n?/gi, "").replace(/```/g, "").trim();
-    const start = jsonStr.indexOf("{");
-    const end = jsonStr.lastIndexOf("}");
-    if (start >= 0 && end > start) jsonStr = jsonStr.slice(start, end + 1);
-
-    const data = normalizeMealPlan(JSON.parse(jsonStr));
-    if (!data.meals || data.meals.length === 0) throw new Error("Пустой план");
-
-    state.mealPlan = data;
-    await storageSet("mealPlan", data);
-    await storageSet("lastPlanDate", new Date().toISOString().split("T")[0]);
-    renderMealPlan();
-  } catch (err) {
-    console.error("Meal plan error:", err);
-    state.lastError = err?.message || String(err);
-    renderMealPlanError();
-  } finally {
-    state.isLoading = false;
+    try {
+      const candidate = await requestPlan(prompt, 0.9 + attempt * 0.05);
+      const repeats = countRepeats(candidate);
+      if (repeats === 0) {
+        data = candidate;
+        state._lastRejected = [];
+      } else {
+        state._lastRejected = candidate.meals.map(m => m.name);
+        console.warn(`План имеет ${repeats} повторов — генерирую заново (попытка ${attempt + 1})`);
+      }
+    } catch (err) {
+      lastErr = err;
+    }
   }
+
+  if (!data) {
+    console.error("Meal plan error:", lastErr);
+    state.lastError = lastErr?.message || String(lastErr);
+    renderMealPlanError();
+    return;
+  }
+
+  // Remember every dish so it never appears again
+  state.usedMeals = [...state.usedMeals, ...data.meals.map(m => m.name)].slice(-120);
+  await storageSet("usedMeals", state.usedMeals);
+
+  state.mealPlan = data;
+  await storageSet("mealPlan", data);
+  await storageSet("lastPlanDate", new Date().toISOString().split("T")[0]);
+  renderMealPlan();
 }
 
 function renderMealPlan() {
@@ -1070,6 +1126,8 @@ async function init() {
   state.settings = await storageGet("settings");
   state.mealPlan = await storageGet("mealPlan");
   state.weightHistory = (await storageGet("weightHistory")) || [];
+  state.usedMeals = (await storageGet("usedMeals")) || [];
+  state.generationCount = (await storageGet("generationCount")) || 0;
 
   // Check if agreed
   if (!agreed) {
