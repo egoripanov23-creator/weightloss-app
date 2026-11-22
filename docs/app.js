@@ -1746,6 +1746,7 @@ function getRefCode() {
 }
 
 function initReferral() {
+  getRefCode(); // ensure code exists from first launch
   // Track who invited this user
   try {
     const ref = new URLSearchParams(window.location.search).get("ref");
