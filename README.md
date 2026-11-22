@@ -50,6 +50,24 @@ python main.py
 | `/alltickets` | Все тикеты (admin) |
 | `/help` | Справка |
 
+## 🌐 Смена домена на бесплатный (DuckDNS)
+
+1. Зарегистрируйтесь бесплатно: https://www.duckdns.org (вход через GitHub/Google/Reddit)
+2. Создайте поддомен, например `aifoodbot` → получится `aifoodbot.duckdns.org`
+3. Скопируйте ваш **токен** из дашборда
+4. Выполните (PowerShell):
+   ```powershell
+   $env:DUCKDNS_TOKEN="ваш_токен"
+   $env:DUCKDNS_DOMAIN="aifoodbot"
+   python bot/set_duckdns.py
+   ```
+   Скрипт обновит A-запись на IP GitHub Pages и создаст `docs/CNAME`.
+5. В GitHub: **Settings → Pages → Custom domain** → введите `aifoodbot.duckdns.org` → Save
+6. Задеплойте: `git add -A && git commit -m "Custom domain" && git push`
+7. Обновите URL в `bot/main.py` (`MINI_APP_URL`, `SITE_URL`) и в `app.js` (`SITE_URL`) на новый домен
+
+После этого сайт и Mini App будут доступны на `https://aifoodbot.duckdns.org`.
+
 ## 📁 Структура
 
 ```
