@@ -17,10 +17,10 @@ const PROXY_URL = "http://localhost:8080/ai";
 // ---------- Telegram WebApp ----------
 const tg = window.Telegram?.WebApp;
 if (tg) {
-  tg.ready();
-  tg.expand();
-  tg.setHeaderColor("#0a0f0d");
-  tg.setBackgroundColor("#0a0f0d");
+  try { tg.ready(); } catch (e) { console.warn("tg.ready:", e); }
+  try { tg.expand(); } catch (e) { console.warn("tg.expand:", e); }
+  try { tg.setHeaderColor("#0a0f0d"); } catch (e) { console.warn("tg.setHeaderColor:", e); }
+  try { tg.setBackgroundColor("#0a0f0d"); } catch (e) { console.warn("tg.setBackgroundColor:", e); }
 }
 
 // ---------- State ----------
@@ -37,21 +37,31 @@ const state = {
 // ---------- Telegram Cloud Storage helpers ----------
 function cloudGet(key) {
   return new Promise((resolve) => {
-    if (!tg?.CloudStorage) { resolve(null); return; }
-    tg.CloudStorage.getItem(key, (err, value) => {
-      if (err) { resolve(null); return; }
-      try { resolve(JSON.parse(value)); } catch { resolve(value); }
-    });
+    try {
+      if (!tg?.CloudStorage?.getItem) { resolve(null); return; }
+      tg.CloudStorage.getItem(key, (err, value) => {
+        if (err) { resolve(null); return; }
+        try { resolve(JSON.parse(value)); } catch { resolve(value); }
+      });
+    } catch (e) {
+      console.warn("CloudStorage getItem not available:", e);
+      resolve(null);
+    }
   });
 }
 
 function cloudSet(key, value) {
   return new Promise((resolve) => {
-    if (!tg?.CloudStorage) { resolve(false); return; }
-    const str = typeof value === "string" ? value : JSON.stringify(value);
-    tg.CloudStorage.setItem(key, str, (err) => {
-      resolve(!err);
-    });
+    try {
+      if (!tg?.CloudStorage?.setItem) { resolve(false); return; }
+      const str = typeof value === "string" ? value : JSON.stringify(value);
+      tg.CloudStorage.setItem(key, str, (err) => {
+        resolve(!err);
+      });
+    } catch (e) {
+      console.warn("CloudStorage setItem not available:", e);
+      resolve(false);
+    }
   });
 }
 
@@ -357,12 +367,10 @@ function showScreen(name) {
   target.classList.remove("exit");
   target.classList.add("active");
   state.screen = name;
-  if (tg) tg.BackButton.isVisible = (name !== "agreement" && name !== "mealplan");
+  try { if (tg?.BackButton) tg.BackButton.isVisible = (name !== "agreement" && name !== "mealplan"); } catch (e) {}
   
   // Haptic feedback
-  if (tg?.HapticFeedback) {
-    tg.HapticFeedback.impactOccurred("light");
-  }
+  try { if (tg?.HapticFeedback) tg.HapticFeedback.impactOccurred("light"); } catch (e) {}
 }
 
 // ---------- Three.js Background ----------
@@ -535,14 +543,16 @@ function renderRegistration() {
     const shareBtn = document.getElementById("btn-share-phone");
     if (shareBtn) {
       shareBtn.addEventListener("click", () => {
-        tg.requestContact((contact) => {
-          if (contact) {
-            document.getElementById("reg-phone").value = contact.phone_number;
-            if (!document.getElementById("reg-name").value) {
-              document.getElementById("reg-name").value = contact.first_name + " " + (contact.last_name || "");
+        try {
+          tg.requestContact((contact) => {
+            if (contact) {
+              document.getElementById("reg-phone").value = contact.phone_number;
+              if (!document.getElementById("reg-name").value) {
+                document.getElementById("reg-name").value = contact.first_name + " " + (contact.last_name || "");
+              }
             }
-          }
-        });
+          });
+        } catch (e) { console.warn("requestContact:", e); }
       });
     }
   }
@@ -1181,7 +1191,8 @@ function renderBottomNav() {
 }
 
 // ---------- Back Button Handler ----------
-if (tg) {
+try {
+if (tg?.BackButton?.onClick) {
   tg.BackButton.onClick(() => {
     if (state.screen === "mealplan") {
       // Can't go back from main screen
@@ -1197,6 +1208,7 @@ if (tg) {
     }
   });
 }
+} catch (e) { console.warn("BackButton:", e); }
 
 // ---------- Start ----------
 document.addEventListener("DOMContentLoaded", () => {
