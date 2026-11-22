@@ -3,13 +3,16 @@
 // ============================================================
 
 // ---------- Configuration ----------
-// Shared AI endpoints (NO per-user API key required — works for everyone)
-// OpenAI-compatible, CORS enabled, free. Trying in order until one works.
+// Multiple FREE keyless AI providers with automatic failover.
+// If one is down / rate-limited / out of tokens → instantly switch to the next.
+// Last working provider is remembered in localStorage and tried first next time.
 const AI_ENDPOINTS = [
-  { url: "https://api.keysaiapifree.com/v1/chat/completions", model: "free-ai" },
-  { url: "https://api.aikeyfreeapi.com/v1/chat/completions", model: "free-ai" },
-  { url: "https://api.freeapillmkey.com/v1/chat/completions", model: "free-ai" },
-  { url: "https://api.aikeyfreeapi.com/v1/chat/completions", model: "free-ai" },
+  { id: "keysai", url: "https://api.keysaiapifree.com/v1/chat/completions", model: "free-ai", key: "free" },
+  { id: "aikey", url: "https://api.aikeyfreeapi.com/v1/chat/completions", model: "free-ai", key: "free" },
+  { id: "freeapillm", url: "https://api.freeapillmkey.com/v1/chat/completions", model: "free-ai", key: "free" },
+  { id: "kilo", url: "https://ai-gateway.kilo.ai/api/v1/chat/completions", model: "kilo-auto/free", key: "anonymous" },
+  { id: "pollinations", url: "https://text.pollinations.ai/openai", model: "gpt-oss-20b", key: "" },
+  { id: "ovh", url: "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1/chat/completions", model: "qwen3.6-27b", key: "" },
 ];
 const AI_TIMEOUT_MS = 20000; // generous — detailed recipes need more generation time
 
@@ -136,15 +139,25 @@ async function storageSet(key, value) {
 }
 
 // ---------- AI API ----------
-// Shared endpoints — no key input, no per-user setup. Fast + CORS-enabled.
+// Try providers in smart order: last working first, then the rest.
+// On any failure (down / 429 / quota / timeout) → immediately switch to next.
 async function aiChat(messages, temperature = 0.7) {
-  for (const ep of AI_ENDPOINTS) {
+  const lastId = localStorage.getItem("ai_provider_ok") || "";
+  const ordered = [
+    ...AI_ENDPOINTS.filter(e => e.id === lastId),
+    ...AI_ENDPOINTS.filter(e => e.id !== lastId),
+  ];
+
+  for (const ep of ordered) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), AI_TIMEOUT_MS);
     try {
+      const headers = { "Content-Type": "application/json" };
+      if (ep.key) headers["Authorization"] = `Bearer ${ep.key}`;
+
       const res = await fetch(ep.url, {
         method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": "Bearer free" },
+        headers,
         body: JSON.stringify({
           model: ep.model,
           messages: messages,
@@ -157,20 +170,28 @@ async function aiChat(messages, temperature = 0.7) {
 
       if (res.ok) {
         const data = await res.json();
-        const content = data.choices?.[0]?.message?.content || "";
+        // Different providers may format the answer differently
+        const content =
+          data.choices?.[0]?.message?.content ||
+          data.choices?.[0]?.text ||
+          data.response ||
+          data.candidates?.[0]?.content?.parts?.[0]?.text ||
+          "";
         if (content) {
+          localStorage.setItem("ai_provider_ok", ep.id); // remember working provider
           state.lastApiError = null;
           return content;
         }
+        state.lastApiError = `${ep.id}: пустой ответ`;
       } else {
         const txt = await res.text().catch(() => "");
-        state.lastApiError = `HTTP ${res.status}: ${txt.substring(0, 120)}`;
-        console.warn(`AI ${ep.url} -> ${res.status}`);
+        state.lastApiError = `${ep.id}: HTTP ${res.status}`;
+        console.warn(`AI ${ep.id} -> ${res.status}: ${txt.substring(0, 80)}`);
       }
     } catch (err) {
       clearTimeout(timeout);
-      state.lastApiError = err?.name === "AbortError" ? "Таймаут (сервер не ответил)" : (err?.message || "Ошибка сети");
-      console.warn(`AI ${ep.url} error:`, err?.message);
+      state.lastApiError = err?.name === "AbortError" ? `${ep.id}: таймаут` : `${ep.id}: ${err?.message || "сеть"}`;
+      console.warn(`AI ${ep.id} error:`, err?.message);
     }
   }
   return null;
