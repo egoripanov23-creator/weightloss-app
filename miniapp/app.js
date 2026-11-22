@@ -5,7 +5,7 @@
 // ---------- Configuration ----------
 // AI Provider: Gemini (supports CORS from browser, free tier)
 // Get free API key: https://aistudio.google.com/apikey
-const GEMINI_MODEL = "gemini-2.0-flash";
+const GEMINI_MODEL = "gemini-3.8-flash";
 const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta";
 
 // Fallback: kakistore (requires proxy for CORS)
