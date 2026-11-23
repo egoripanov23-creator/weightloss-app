@@ -106,9 +106,14 @@
 
   function parseSteps(recipe){
     var raw=String(recipe||'').split(/\n+/).map(function(s){return s.trim();}).filter(Boolean);
-    if(!raw.length) raw=['Подготовьте ингредиенты','Приготовьте блюдо','Подавайте'];
     var steps=[];
-    raw.forEach(function(s){ steps.push(s.replace(/^\d+[\.\)]\s*/,'').replace(/^[👨‍🍳⏱🧺💡]\s*/,'')); });
+    raw.forEach(function(s){
+      // skip meta lines (time / ingredients) — keep only cooking steps
+      if(/^[⏱🧺💡]/.test(s) || /^(время|ингредиенты|совет)\s*[:—]/i.test(s)) return;
+      var clean=s.replace(/^\d+[\.\)]\s*/,'').replace(/^[👨‍🍳]\s*/,'').trim();
+      if(clean) steps.push(clean);
+    });
+    if(!steps.length) steps=['Подготовьте ингредиенты','Приготовьте блюдо','Подавайте'];
     return steps;
   }
 
