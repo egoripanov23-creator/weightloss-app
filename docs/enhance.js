@@ -101,41 +101,122 @@
     canvas.addEventListener('pointercancel',function(){viewer.drag=false;});
   }
 
-  /* ---------- Cooking "video" player ---------- */
-  var player={timer:null,step:0,steps:[],playing:false,dur:3200};
+  /* ---------- Cooking "video" — procedural animated canvas film ---------- */
+  var player={timer:null,raf:null,step:0,steps:[],playing:false,dur:4200,start:0,t:0,ctx:null,cols:[C.green,C.lime]};
 
   function parseSteps(recipe){
     var raw=String(recipe||'').split(/\n+/).map(function(s){return s.trim();}).filter(Boolean);
     var steps=[];
     raw.forEach(function(s){
-      // skip meta lines (time / ingredients) — keep only cooking steps
-      if(/^[⏱🧺💡]/.test(s) || /^(время|ингредиенты|совет)\s*[:—]/i.test(s)) return;
-      var clean=s.replace(/^\d+[\.\)]\s*/,'').replace(/^[👨‍🍳]\s*/,'').trim();
-      if(clean) steps.push(clean);
+      var clean=s.replace(/^[\d\.\)\s]+/,'').replace(/^[^\p{L}\p{N}]+/u,'').trim();
+      if(/^(время|ингредиенты|совет)\b/i.test(clean)) return;
+      if(clean) steps.push(clean.replace(/^\d+[\.\)]\s*/,'').trim());
     });
     if(!steps.length) steps=['Подготовьте ингредиенты','Приготовьте блюдо','Подавайте'];
     return steps;
   }
 
+  function drawKitchen(ctx,W,H,t,step,total,cols){
+    var cx=W/2, cy=H*0.62;
+    ctx.clearRect(0,0,W,H);
+    // backdrop gradient
+    var bg=ctx.createLinearGradient(0,0,0,H);
+    bg.addColorStop(0,'#111a30'); bg.addColorStop(1,'#0a0d1c');
+    ctx.fillStyle=bg; ctx.fillRect(0,0,W,H);
+    // soft spotlight
+    var glow=ctx.createRadialGradient(cx,cy-40,10,cx,cy-40,180);
+    glow.addColorStop(0,'rgba(124,247,208,.14)'); glow.addColorStop(1,'rgba(124,247,208,0)');
+    ctx.fillStyle=glow; ctx.fillRect(0,0,W,H);
+
+    var phase=(t%player.dur)/player.dur; // 0..1 within step
+    var cooking=step<total-1;
+
+    // steam particles
+    if(cooking){
+      for(var i=0;i<7;i++){
+        var st=(phase*1.6+i/7)%1;
+        var sx=cx+Math.sin(i*2.3+phase*6)*26;
+        var sy=cy-60-st*110;
+        ctx.globalAlpha=(1-st)*.35;
+        ctx.fillStyle='#dff';
+        ctx.beginPath(); ctx.arc(sx,sy,10+st*14,0,Math.PI*2); ctx.fill();
+      }
+      ctx.globalAlpha=1;
+    }
+
+    // pan / pot
+    var panW=120,panH=44;
+    ctx.fillStyle='#2b3350';
+    ctx.beginPath(); ctx.ellipse(cx,cy,panW,panH*.5,0,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='#3a4568';
+    ctx.fillRect(cx-panW,cy-8,panW*2,26);
+    ctx.strokeStyle='#59668f';ctx.lineWidth=3;
+    ctx.beginPath();ctx.moveTo(cx+panW,cy);ctx.lineTo(cx+panW+50,cy-16);ctx.stroke();
+
+    // food pieces bouncing with motion
+    var n=10;
+    for(var j=0;j<n;j++){
+      var ang=j/n*Math.PI*2 + t*0.0016;
+      var rr=26+Math.sin(j*1.7+t*0.004)*16;
+      var fx=cx+Math.cos(ang)*rr;
+      var fy=cy-6+Math.sin(ang*1.3+t*0.005)*12;
+      ctx.fillStyle= j%3? '#'+cols[0].toString(16).padStart(6,'0') : '#'+cols[1].toString(16).padStart(6,'0');
+      ctx.beginPath();ctx.ellipse(fx,fy,12,9,ang,0,Math.PI*2);ctx.fill();
+    }
+    // flame under pan
+    if(cooking){
+      for(var f=0;f<5;f++){
+        var fh=18+Math.sin(t*0.01+f)*10;
+        ctx.fillStyle='rgba(255,150,60,'+(0.5-f*0.07)+')';
+        ctx.beginPath();ctx.ellipse(cx-40+f*20,cy+30,fh*.4,fh,0,0,Math.PI*2);ctx.fill();
+      }
+    }
+
+    // final plate beat
+    if(step===total-1){
+      ctx.fillStyle='#f8fbff';
+      ctx.beginPath();ctx.ellipse(cx,cy+10,96,34,0,0,Math.PI*2);ctx.fill();
+      ctx.fillStyle='#'+cols[0].toString(16).padStart(6,'0');
+      ctx.beginPath();ctx.ellipse(cx,cy+6,60,20,0,0,Math.PI*2);ctx.fill();
+      ctx.globalAlpha=.9;ctx.fillStyle='#fff';ctx.font='bold 16px sans-serif';ctx.textAlign='center';
+      ctx.fillText('✅ ГОТОВО',cx,cy-70);ctx.globalAlpha=1;
+    }
+    // step badge
+    ctx.fillStyle='rgba(0,0,0,.45)';ctx.fillRect(0,0,W,34);
+    ctx.fillStyle='#7cf7d0';ctx.font='bold 13px sans-serif';ctx.textAlign='left';
+    ctx.fillText('ШАГ '+(step+1)+' / '+total,14,22);
+    // REC dot
+    if(player.playing){ctx.fillStyle='#ff5b6e';ctx.beginPath();ctx.arc(W-18,17,5,0,Math.PI*2);ctx.fill();ctx.fillStyle='#fff';ctx.font='11px sans-serif';ctx.fillText('REC',W-52,21);}
+  }
+
+  function filmLoop(ts){
+    if(!player.playing)return;
+    if(!player.start)player.start=ts;
+    player.t=ts-player.start;
+    if(player.t>=player.dur){
+      player.start=ts;
+      if(player.step>=player.steps.length-1){togglePlay();return;}
+      showStep(player.step+1);
+    }
+    var c=document.getElementById('film-canvas');
+    if(c&&player.ctx)drawKitchen(player.ctx,c.width,c.height,player.t,player.step,player.steps.length,player.cols);
+    player.raf=requestAnimationFrame(filmLoop);
+  }
+
   function openVideo(name,recipe){
-    var wrap=document.getElementById('v2-modal');
-    wrap.classList.remove('hidden');
+    var wrap=document.getElementById('v2-modal');wrap.classList.remove('hidden');
     document.getElementById('v2-modal-title').textContent='🎬 '+name;
-    document.getElementById('v2-modal-sub').textContent='Видео-инструкция по приготовлению';
-    player.steps=parseSteps(recipe); player.step=0; player.playing=false;
+    document.getElementById('v2-modal-sub').textContent='Видео-инструкция · пошаговое приготовление';
+    player.steps=parseSteps(recipe);player.step=0;player.playing=false;player.cols=dishColor(name);
     var body=document.getElementById('v2-modal-body');
-    var cols=dishColor(name);
     body.innerHTML=
-      '<div class="v2-player" id="v2-player">'+
-        '<div class="v2-steam"><i></i><i></i><i></i></div>'+
-        '<div class="v2-stage"><div class="v2-stage__plate"></div><div class="v2-stage__food" style="--food1:#'+cols[0].toString(16).padStart(6,'0')+';--food2:#'+cols[1].toString(16).padStart(6,'0')+'"></div></div>'+
-      '</div>'+
+      '<div class="v2-player" style="padding:0"><canvas id="film-canvas" width="520" height="330" style="width:100%;height:330px;display:block;border-radius:22px 22px 0 0"></canvas></div>'+
       '<div class="v2-step-text" id="v2-step-text"></div>'+
-      '<div class="v2-controls">'+
-        '<button class="v2-play" id="v2-play">▶</button>'+
-        '<div class="v2-progress"><div class="v2-progress__bar" id="v2-bar"><div class="v2-progress__fill" id="v2-fill"></div></div>'+
-        '<div class="v2-progress__meta"><span id="v2-step-now">Шаг 1</span><span id="v2-step-count">из '+player.steps.length+'</span></div></div>'+
-      '</div>';
+      '<div class="v2-controls"><button class="v2-play" id="v2-play">▶</button>'+
+      '<div class="v2-progress"><div class="v2-progress__bar" id="v2-bar"><div class="v2-progress__fill" id="v2-fill"></div></div>'+
+      '<div class="v2-progress__meta"><span id="v2-step-now">Шаг 1</span><span id="v2-step-count">из '+player.steps.length+'</span></div></div></div>';
+    var c=document.getElementById('film-canvas');player.ctx=c.getContext('2d');
+    drawKitchen(player.ctx,c.width,c.height,0,0,player.steps.length,player.cols);
     showStep(0);
     document.getElementById('v2-play').addEventListener('click',togglePlay);
     document.getElementById('v2-bar').addEventListener('click',function(e){
@@ -147,21 +228,16 @@
 
   function showStep(i){
     player.step=i;
-    var t=document.getElementById('v2-step-text'); if(t)t.textContent=player.steps[i]||'';
-    var n=document.getElementById('v2-step-now'); if(n)n.textContent='Шаг '+(i+1);
-    var f=document.getElementById('v2-fill'); if(f)f.style.width=((i+1)/player.steps.length*100)+'%';
+    var t=document.getElementById('v2-step-text');if(t)t.textContent=player.steps[i]||'';
+    var n=document.getElementById('v2-step-now');if(n)n.textContent='Шаг '+(i+1);
+    var f=document.getElementById('v2-fill');if(f)f.style.width=((i+1)/player.steps.length*100)+'%';
   }
   function togglePlay(){
     player.playing=!player.playing;
-    var b=document.getElementById('v2-play'); if(b)b.textContent=player.playing?'⏸':'▶';
-    var p=document.getElementById('v2-player'); if(p)p.classList.toggle('playing',player.playing);
+    var b=document.getElementById('v2-play');if(b)b.textContent=player.playing?'⏸':'▶';
     if(player.timer)clearInterval(player.timer);
-    if(player.playing){
-      player.timer=setInterval(function(){
-        if(player.step>=player.steps.length-1){togglePlay();return;}
-        showStep(player.step+1);
-      },player.dur);
-    }
+    if(player.raf)cancelAnimationFrame(player.raf);
+    if(player.playing){player.start=0;player.raf=requestAnimationFrame(filmLoop);}
   }
 
   /* ---------- modal shell ---------- */
@@ -180,7 +256,9 @@
   function closeModal(){
     var m=document.getElementById('v2-modal'); if(m)m.classList.add('hidden');
     if(viewer.raf){cancelAnimationFrame(viewer.raf);viewer.raf=null;}
-    if(player.timer){clearInterval(player.timer);player.timer=null;player.playing=false;}
+    if(player.timer){clearInterval(player.timer);player.timer=null;}
+    if(player.raf){cancelAnimationFrame(player.raf);player.raf=null;}
+    player.playing=false;
   }
 
   function esc(s){return String(s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
