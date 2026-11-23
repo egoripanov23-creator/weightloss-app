@@ -35,37 +35,143 @@
 
   function buildDish(name){
     var g = new THREE.Group();
-    var cols = dishColor(name);
+    var n=(name||'').toLowerCase();
+    var cols=dishColor(name);
+    var isSoup=/суп|борщ|щи|рассольник|окрош|солян/.test(n);
+    var isSalad=/салат|овощ/.test(n);
+    var isFish=/рыб|лосос|кревет|тунец/.test(n);
+    var isMeat=/куриц|говяд|свин|индей|мяс|котлет|стейк/.test(n);
+    var isPorridge=/каш|гречк|овсян|рис/.test(n);
+    var isPasta=/паст|макар|лапш/.test(n);
+    var isDessert=/творог|йогурт|ягод|десерт|блин/.test(n);
 
-    // ceramic plate
-    var plate = new THREE.Mesh(
-      new THREE.CylinderGeometry(2.5,2.25,0.16,64),
-      new THREE.MeshStandardMaterial({color:0xf8fbff,roughness:.35,metalness:.05})
-    );
-    plate.position.y=-0.25; plate.receiveShadow=true; g.add(plate);
-    var rim = new THREE.Mesh(
-      new THREE.TorusGeometry(2.42,0.09,16,64),
-      new THREE.MeshStandardMaterial({color:0xdfe8ff,roughness:.3})
-    );
-    rim.rotation.x=Math.PI/2; rim.position.y=-0.16; g.add(rim);
+    // soft shadow under plate
+    var shadow=new THREE.Mesh(new THREE.CircleGeometry(3.1,48),new THREE.MeshBasicMaterial({color:0x000000,transparent:true,opacity:.34}));
+    shadow.rotation.x=-Math.PI/2; shadow.position.y=-0.34; g.add(shadow);
 
-    // food mound — clustered spheres look like a real portion
-    var foodMat = new THREE.MeshStandardMaterial({color:cols[0],roughness:.7,metalness:.02});
-    var foodMat2 = new THREE.MeshStandardMaterial({color:cols[1],roughness:.75});
-    for(var i=0;i<16;i++){
-      var a=i/16*Math.PI*2, r=0.5+Math.random()*1.1;
-      var s=new THREE.Mesh(new THREE.SphereGeometry(0.32+Math.random()*0.22,14,12), i%3?foodMat:foodMat2);
-      s.position.set(Math.cos(a)*r, 0.08+Math.random()*0.42, Math.sin(a)*r);
-      s.castShadow=true; s.receiveShadow=true; g.add(s);
+    // cartoon-friendly ceramic plate
+    var plate=new THREE.Mesh(new THREE.CylinderGeometry(2.75,2.35,0.2,64),new THREE.MeshToonMaterial({color:0xfafcff}));
+    plate.position.y=-0.2; plate.receiveShadow=true; g.add(plate);
+    var rim=new THREE.Mesh(new THREE.TorusGeometry(2.62,0.13,16,72),new THREE.MeshToonMaterial({color:0xe7eeff}));
+    rim.rotation.x=Math.PI/2; rim.position.y=-0.08; g.add(rim);
+    var inner=new THREE.Mesh(new THREE.CylinderGeometry(2.35,2.35,0.03,64),new THREE.MeshToonMaterial({color:0xffffff}));
+    inner.position.y=-0.09; g.add(inner);
+
+    var foodMat=new THREE.MeshToonMaterial({color:cols[0]});
+    var foodMat2=new THREE.MeshToonMaterial({color:cols[1]});
+    var sauceMat=new THREE.MeshToonMaterial({color:0xffc37a,transparent:true,opacity:.88});
+
+    function chunk(x,y,z,sx,sy,sz,mat,rot){
+      var m=new THREE.Mesh(new THREE.SphereGeometry(1,18,14),mat);
+      m.scale.set(sx,sy,sz);
+      m.position.set(x,y,z);
+      if(rot)m.rotation.set(rot[0],rot[1],rot[2]);
+      m.castShadow=true; m.receiveShadow=true; g.add(m);
+      return m;
     }
-    // garnish
-    for(var j=0;j<6;j++){
-      var ang=j/6*Math.PI*2;
-      var leaf=new THREE.Mesh(new THREE.SphereGeometry(0.13,10,8),new THREE.MeshStandardMaterial({color:C.green,roughness:.8}));
-      leaf.scale.set(1,.4,1.6);
-      leaf.position.set(Math.cos(ang)*1.5,0.5,Math.sin(ang)*1.5);
-      g.add(leaf);
+
+    if(isSoup){
+      // bowl
+      var bowl=new THREE.Mesh(new THREE.SphereGeometry(2.0,32,16,0,Math.PI*2,0,Math.PI/2),new THREE.MeshToonMaterial({color:0xfff3e0,side:THREE.DoubleSide}));
+      bowl.scale.set(1,0.72,1); bowl.position.y=0.05; g.add(bowl);
+      var liquid=new THREE.Mesh(new THREE.CircleGeometry(1.75,48),new THREE.MeshToonMaterial({color:cols[0]}));
+      liquid.rotation.x=-Math.PI/2; liquid.position.y=0.32; g.add(liquid);
+      for(var i=0;i<8;i++){
+        var a=i/8*Math.PI*2;
+        chunk(Math.cos(a)*0.9,0.42,Math.sin(a)*0.9,.22,.12,.22,foodMat2,[0,0,0]);
+      }
+      chunk(0,.48,0,.35,.12,.35,foodMat2,[0,0,0]);
+    } else if(isSalad){
+      for(var i=0;i<18;i++){
+        var a=i/18*Math.PI*2+(i%2)*.35;
+        var r=.4+ (i%5)*.38;
+        chunk(Math.cos(a)*r,.18+ (i%4)*.12,Math.sin(a)*r,.34,.16,.3,foodMat,[i*.4,i*.7,i*.2]);
+      }
+      for(var j=0;j<7;j++){
+        var ang=j/7*Math.PI*2;
+        chunk(Math.cos(ang)*1.15,.42,Math.sin(ang)*1.15,.2,.2,.2,foodMat2,[0,0,0]);
+      }
+      for(var k=0;k<5;k++){
+        chunk((k-2)*.45,.55,(k%2-.5)*.9,.16,.08,.26,new THREE.MeshToonMaterial({color:C.red}),[0,k*.6,0]);
+      }
+    } else if(isFish){
+      var fillet=new THREE.Mesh(new THREE.BoxGeometry(2.6,.35,1.1),new THREE.MeshToonMaterial({color:cols[0]}));
+      fillet.position.set(0,.22,0); fillet.castShadow=true; g.add(fillet);
+      var top=new THREE.Mesh(new THREE.CylinderGeometry(.9,.9,.08,24),new THREE.MeshToonMaterial({color:cols[1]}));
+      top.rotation.z=Math.PI/2; top.position.set(0,.42,0); g.add(top);
+      for(var i=0;i<4;i++){
+        var slice=new THREE.Mesh(new THREE.TorusGeometry(.28,.06,10,24),new THREE.MeshToonMaterial({color:0xfff2a6}));
+        slice.rotation.x=Math.PI/2; slice.position.set(-1+i*.65,.52,(i%2-.5)*.35); g.add(slice);
+      }
+      for(var j=0;j<5;j++) chunk((j-2)*.4,.58,(j%2-.5)*.5,.08,.08,.22,new THREE.MeshToonMaterial({color:C.green}),[0,0,0]);
+    } else if(isMeat){
+      for(var i=0;i<6;i++){
+        var ang=i/6*Math.PI*2;
+        chunk(Math.cos(ang)*.95,.28,Math.sin(ang)*.95,.42,.28,.34,foodMat,[i*.3,i*.5,i*.2]);
+      }
+      for(var j=0;j<5;j++){
+        var ang2=j/5*Math.PI*2+.4;
+        chunk(Math.cos(ang2)*1.55,.22,Math.sin(ang2)*1.55,.34,.2,.34,new THREE.MeshToonMaterial({color:0xffd27a}),[0,0,0]);
+      }
+      for(var k=0;k<4;k++) chunk((k-1.5)*.55,.52,(k%2-.5)*.6,.12,.12,.12,new THREE.MeshToonMaterial({color:C.red}),[0,0,0]);
+    } else if(isPasta){
+      for(var i=0;i<12;i++){
+        var torus=new THREE.Mesh(new THREE.TorusGeometry(.55,.11,10,28),new THREE.MeshToonMaterial({color:cols[0]}));
+        torus.position.set((i%4-1.5)*.7,.18+Math.floor(i/4)*.18,(i%3-1)*.55);
+        torus.rotation.set(i*.4,i*.7,i*.2);
+        torus.castShadow=true; g.add(torus);
+      }
+      var sauce=new THREE.Mesh(new THREE.SphereGeometry(1.1,20,14),sauceMat);
+      sauce.scale.set(1.5,.25,1.2); sauce.position.y=.34; g.add(sauce);
+      for(var j=0;j<6;j++) chunk((j-2.5)*.4,.48,(j%2-.5)*.4,.1,.1,.1,new THREE.MeshToonMaterial({color:C.green}),[0,0,0]);
+    } else if(isPorridge){
+      var mound=new THREE.Mesh(new THREE.SphereGeometry(1.55,32,20),new THREE.MeshToonMaterial({color:cols[0]}));
+      mound.scale.set(1.25,.72,1.15); mound.position.y=.22; mound.castShadow=true; g.add(mound);
+      for(var i=0;i<10;i++){
+        var a=i/10*Math.PI*2;
+        chunk(Math.cos(a)*.9,.62,Math.sin(a)*.9,.13,.1,.13,foodMat2,[0,0,0]);
+      }
+      for(var j=0;j<5;j++) chunk((j-2)*.35,.7,(j%2-.5)*.5,.08,.06,.08,new THREE.MeshToonMaterial({color:C.purple}),[0,0,0]);
+    } else if(isDessert){
+      var base=new THREE.Mesh(new THREE.CylinderGeometry(1.35,1.15,.7,32),new THREE.MeshToonMaterial({color:cols[0]}));
+      base.position.y=.18; base.castShadow=true; g.add(base);
+      var top=new THREE.Mesh(new THREE.SphereGeometry(1.25,28,16),new THREE.MeshToonMaterial({color:cols[1]}));
+      top.scale.set(1,.55,1); top.position.y=.62; g.add(top);
+      for(var i=0;i<8;i++){
+        var a=i/8*Math.PI*2;
+        chunk(Math.cos(a)*1.05,.78,Math.sin(a)*1.05,.12,.2,.12,new THREE.MeshToonMaterial({color:C.red}),[0,0,0]);
+      }
+    } else {
+      for(var i=0;i<14;i++){
+        var a=i/14*Math.PI*2+(i%2)*.28;
+        var r=.35+(i%6)*.34;
+        chunk(Math.cos(a)*r,.16+(i%5)*.11,Math.sin(a)*r,.34,.2,.28, i%3?foodMat:foodMat2,[i*.35,i*.5,i*.2]);
+      }
+      for(var j=0;j<6;j++){
+        var ang=j/6*Math.PI*2;
+        chunk(Math.cos(ang)*1.25,.42,Math.sin(ang)*1.25,.16,.1,.22,new THREE.MeshToonMaterial({color:C.green}),[0,0,0]);
+      }
     }
+
+    // sauce drizzle for hot savoury dishes
+    if(isMeat || isPasta || isPorridge){
+      var drizzle=new THREE.Mesh(new THREE.TorusGeometry(1.05,.055,8,48),new THREE.MeshToonMaterial({color:0xffe0a3}));
+      drizzle.rotation.x=Math.PI/2; drizzle.position.y=.72; g.add(drizzle);
+    }
+
+    // steam for hot dishes
+    if(!(isSalad || isDessert)){
+      for(var s=0;s<5;s++){
+        var steam=new THREE.Mesh(new THREE.SphereGeometry(.12+s*.03,10,8),new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:.22}));
+        steam.position.set((s-2)*.45,.85+s*.12,(s%2-.5)*.35);
+        g.add(steam);
+      }
+    }
+
+    // cartoon outline (backfaces) for a polished toy-like look
+    var outline=new THREE.Mesh(plate.geometry.clone(),new THREE.MeshBasicMaterial({color:0x1a2340,side:THREE.BackSide}));
+    outline.scale.set(1.035,1.08,1.035); outline.position.copy(plate.position); g.add(outline);
+
     return g;
   }
 

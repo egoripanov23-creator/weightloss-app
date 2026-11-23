@@ -129,27 +129,62 @@ function localSet(key, value) {
 
 // ---------- Storage abstraction ----------
 async function storageGet(key) {
-  if (isTelegram) {
-    try {
-      const cloud = await cloudGet(key);
-      if (cloud !== null) return cloud;
-    } catch (e) {
-      console.warn("storageGet cloud error:", e);
-    }
+  const local = localGet(key);
+  if (!isTelegram) return local;
+  try {
+    const cloud = await cloudGet(key);
+    if (cloud !== null && (local === null || key !== "user")) return cloud;
+  } catch (e) {
+    console.warn("storageGet cloud error:", e);
   }
-  return localGet(key);
+  return local;
 }
 
 async function storageSet(key, value) {
-  if (isTelegram) {
-    try {
-      const cloudOk = await cloudSet(key, value);
-      if (cloudOk) return;
-    } catch (e) {
-      console.warn("storageSet cloud error:", e);
-    }
-  }
   localSet(key, value);
+  if (isTelegram) {
+    try { await cloudSet(key, value); } catch (e) { console.warn("storageSet cloud error:", e); }
+  }
+}
+
+// ---------- Signed session (verified against embedded RSA public key) ----------
+const SESSION_PUBLIC_KEY_B64 = "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAmBMUx/Abyz2fbkXmeRYkvfzjddkgAB1waA5yK2fCvW0qJFV5uz0jP+VgAQnolVwa3koCPlROsasvl0Haly2iFIFKCeqkZDdEiKiaDskPWUA7KguRsMHj4EfGjzx4/pnXIyiqPb530bbXyvZrGE2kb5YVC1d9+mSyTpX385g0oKOPI/olyHzXeKtGD1uMMle5Xg6qdDqpkNDg4uCmNSeATGQqzH/lbEkt9fZXCX15fX+o+1wouve24gtnpj+i/rNFCFbN/YF1GPYMfs2M1URe5Enq+hfW6h9z1Dypfc6TSI7/o0S0gS/zUxvEmEMQ4kfKEzF+q5Xj1v6bv3txjyU6WQIDAQAB";
+
+function base64UrlToBuffer(b64url) {
+  const b64 = b64url.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((b64url.length + 3) % 4);
+  const raw = atob(b64);
+  const buf = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) buf[i] = raw.charCodeAt(i);
+  return buf.buffer;
+}
+
+async function verifySessionToken(token) {
+  try {
+    if (!token || typeof token !== "string") return false;
+    const parts = token.split(".");
+    if (parts.length !== 2) return false;
+    const payloadBuf = base64UrlToBuffer(parts[0]);
+    const sigBuf = base64UrlToBuffer(parts[1]);
+    const key = await crypto.subtle.importKey(
+      "spki",
+      base64UrlToBuffer(SESSION_PUBLIC_KEY_B64),
+      { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+      false,
+      ["verify"]
+    );
+    const ok = await crypto.subtle.verify("RSASSA-PKCS1-v1_5", key, sigBuf, payloadBuf);
+    if (!ok) return false;
+    const payload = JSON.parse(new TextDecoder().decode(payloadBuf));
+    if (!payload.login || !payload.iat) return false;
+    const age = Date.now() / 1000 - Number(payload.iat);
+    return age >= 0 && age < 30 * 24 * 3600;
+  } catch (e) {
+    return false;
+  }
+}
+
+function isAuthenticated() {
+  return !!(state.user && state.user.login && state.user.session);
 }
 
 // ---------- AI API ----------
@@ -425,6 +460,11 @@ const DIFFICULTY = [
 
 // ---------- Screen Navigation ----------
 function showScreen(name) {
+  const publicScreens = ["agreement", "login", "registration"];
+  if (!publicScreens.includes(name) && !isAuthenticated()) {
+    renderLogin();
+    name = "login";
+  }
   document.querySelectorAll(".screen").forEach(s => {
     s.classList.remove("active");
     s.classList.add("exit");
@@ -714,7 +754,7 @@ function renderRegistration() {
       return;
     }
 
-    state.user = { name, phone, email, login, verifiedViaTelegram: state.user?.verifiedViaTelegram || isTelegram, createdAt: state.user?.createdAt || new Date().toISOString() };
+    state.user = { name, phone, email, login, session: state.user?.session || "", verifiedViaTelegram: state.user?.verifiedViaTelegram || isTelegram, createdAt: state.user?.createdAt || new Date().toISOString() };
     await storageSet("user", state.user);
     renderSettings();
     showScreen("settings");
@@ -1549,7 +1589,13 @@ async function init() {
 
   // Load saved data
   const agreed = await storageGet("agreed");
-  state.user = await storageGet("user");
+  const savedUser = await storageGet("user");
+  if (savedUser && await verifySessionToken(savedUser.session)) {
+    state.user = savedUser;
+  } else {
+    state.user = null;
+    await storageSet("user", null);
+  }
   state.settings = await storageGet("settings");
   state.mealPlan = await storageGet("mealPlan");
   state.weightHistory = (await storageGet("weightHistory")) || [];
@@ -1564,13 +1610,14 @@ async function init() {
     const regPhone = urlParams.get("phone");
     const regName = urlParams.get("name");
     const regLogin = urlParams.get("login");
-    const session = urlParams.get("session");
+    const regSession = urlParams.get("session");
     if (regToken && regPhone) {
       state.user = {
         name: regName || state.user?.name || "",
         phone: regPhone,
         email: state.user?.email || "",
         login: regLogin || state.user?.login || "",
+        session: regSession || state.user?.session || "",
         verifiedViaTelegram: true,
         createdAt: state.user?.createdAt || new Date().toISOString(),
       };
