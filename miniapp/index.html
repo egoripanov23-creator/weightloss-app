@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes, viewport-fit=cover">
   <meta name="theme-color" content="#0a0f0d">
   <meta name="color-scheme" content="dark">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -57,7 +57,7 @@
         <div class="splash__status">Загрузка</div>
         <div class="splash__progress"><div class="splash__progress-fill"></div></div>
       </div>
-      <button class="splash__skip" id="splash-skip">Пропустить →</button>
+      <button type="button" class="splash__skip" id="splash-skip" aria-label="Пропустить">Пропустить →</button>
     </div>
 
     <!-- Screens -->
@@ -75,7 +75,7 @@
     </button>
 
     <!-- Feedback (review) floating badge -->
-    <button id="review-btn" class="review-btn" title="Оставить отзыв">
+    <button type="button" id="review-btn" class="review-btn" title="Оставить отзыв" aria-label="Оставить отзыв" aria-hidden="true">
       <span>⭐</span> Оставить отзыв
     </button>
 
@@ -83,7 +83,7 @@
     <div id="review-sheet" class="review-sheet hidden">
       <div class="review-sheet__backdrop" id="review-backdrop"></div>
       <div class="review-sheet__card animate-in">
-        <button class="review-sheet__close" id="review-close">✕</button>
+        <button type="button" class="review-sheet__close" id="review-close" aria-label="Закрыть">✕</button>
         <div style="text-align:center; margin-bottom:12px;">
           <div style="font-size:2.2rem; margin-bottom:6px;">⭐</div>
           <h2>Ваш отзыв</h2>
@@ -101,7 +101,7 @@
     <div id="support-sheet" class="support-sheet hidden">
       <div class="support-sheet__backdrop" id="support-backdrop"></div>
       <div class="support-sheet__card animate-in">
-        <button class="support-sheet__close" id="support-close">✕</button>
+        <button type="button" class="support-sheet__close" id="support-close" aria-label="Закрыть">✕</button>
         <div style="text-align:center; margin-bottom:14px;">
           <div style="font-size:2.2rem; margin-bottom:6px;">🎫</div>
           <h2>Поддержка</h2>
@@ -148,7 +148,7 @@
   <!-- Chart.js (deferred, weight chart) -->
   <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <!-- App (deferred, runs after libs) -->
-  <script defer src="app.js?v=23"></script>
-  <script defer src="enhance.js?v=2"></script>
+  <script defer src="app.js?v=24"></script>
+  <script defer src="enhance.js?v=3"></script>
 </body>
 </html>

@@ -9,7 +9,17 @@
   };
 
   /* ---------- 3D dish viewer ---------- */
-  var viewer = { renderer:null, scene:null, camera:null, group:null, raf:null, drag:false, px:0 };
+  var viewer = { renderer:null, scene:null, camera:null, group:null, sceneLights:[], raf:null, drag:false, px:0, zoom:0 };
+  function closeViewer(){
+    if(!viewer.raf)return;
+    cancelAnimationFrame(viewer.raf); viewer.raf=null;
+    if(viewer.group)viewer.scene?.clear?.();
+    viewer.sceneLights.forEach(l=>{l.geometry?.dispose?.();l.material?.dispose?.();l.position&&null});
+    viewer.sceneLights.length=0;
+    if(viewer.renderer){viewer.renderer.clear(true,true,true);viewer.renderer.dispose();if(viewer.renderer.forceContextLoss)viewer.renderer.forceContextLoss();}
+    viewer.renderer=null; viewer.scene=null; viewer.camera=null; viewer.group=null;
+  }
+  document.addEventListener('visibilitychange', function(){ if(document.hidden) closeViewer(); });
 
   function dishColor(name){
     var n=(name||'').toLowerCase();
@@ -60,49 +70,52 @@
   }
 
   function open3D(name){
-    var wrap=document.getElementById('v2-modal');
-    wrap.classList.remove('hidden');
-    document.getElementById('v2-modal-title').textContent='🥘 '+name;
-    document.getElementById('v2-modal-sub').textContent='3D-модель блюда — покрутите, чтобы рассмотреть со всех сторон';
-    var body=document.getElementById('v2-modal-body');
-    body.innerHTML='<div class="v2-canvas-wrap"><canvas id="dish-canvas"></canvas><div class="v2-hint">🖐 Потяните, чтобы вращать · автоматическое вращение</div></div>'+
-      '<div class="v2-modal__info"><h3>'+esc(name)+'</h3><p>Реалистичная 3D-визуализация порции. Вращайте модель пальцем или мышью.</p></div>';
-
-    var canvas=document.getElementById('dish-canvas');
-    var W=canvas.clientWidth||400, H=330;
-    var renderer=new THREE.WebGLRenderer({canvas:canvas,antialias:true,alpha:true});
-    renderer.setPixelRatio(Math.min(devicePixelRatio,2));
-    renderer.setSize(W,H,false);
-    renderer.shadowMap.enabled=true;
-    var scene=new THREE.Scene();
-    var cam=new THREE.PerspectiveCamera(38,W/H,.1,100);
-    cam.position.set(0,4.2,7.5); cam.lookAt(0,0,0);
-    scene.add(new THREE.AmbientLight(0xffffff,.75));
-    var key=new THREE.DirectionalLight(0xffffff,1.5); key.position.set(4,8,5); key.castShadow=true; scene.add(key);
-    var fill=new THREE.DirectionalLight(0x7cf7d0,.9); fill.position.set(-5,3,-4); scene.add(fill);
-    var group=buildDish(name); scene.add(group);
-    viewer={renderer:renderer,scene:scene,camera:cam,group:group,raf:null,drag:false,px:0,angle:0};
-
-    var rot=0;
-    function loop(){
-      viewer.raf=requestAnimationFrame(loop);
-      if(!viewer.drag) rot+=0.004;
-      group.rotation.y=rot;
-      renderer.render(scene,cam);
+    try{
+      closeViewer();
+      var wrap=document.getElementById('v2-modal');
+      wrap.classList.remove('hidden');
+      document.getElementById('v2-modal-title').textContent='🥘 '+name;
+      document.getElementById('v2-modal-sub').textContent='3D-модель блюда — покрутите, чтобы рассмотреть со всех сторон';
+      var body=document.getElementById('v2-modal-body');
+      body.innerHTML='<div class="v2-canvas-wrap"><canvas id="dish-canvas"></canvas><div class="v2-hint">🖐 Потяните, чтобы вращать · колёсико — приблизить</div></div>'+
+        '<div class="v2-modal__info"><h3>'+esc(name)+'</h3><p>Реалистичная 3D-визуализация порции. Вращайте модель пальцем или мышью.</p></div>';
+      var canvas=document.getElementById('dish-canvas');
+      var H=Math.max(160,Math.round(wrap.getBoundingClientRect().height));
+      var renderer=new THREE.WebGLRenderer({canvas:canvas,antialias:true,alpha:true});
+      renderer.setClearColor('#070b14',1);
+      renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+      renderer.setSize(H*1.7,H,false);
+      renderer.shadowMap.enabled=true;
+      var scene=new THREE.Scene();
+      var cam=new THREE.PerspectiveCamera(36,1.7,0.1,100);
+      cam.position.set(0,4.8,7.8); cam.lookAt(0,0,0);
+      scene.add(new THREE.AmbientLight(0xffffff,.78));
+      var key=new THREE.DirectionalLight(0xffffff,1.8); key.position.set(4,10,6); key.castShadow=true; scene.add(key);
+      var fill=new THREE.DirectionalLight(0x7cf7d0,.8); fill.position.set(-5,3,-4); scene.add(fill);
+      var group=buildDish(name); scene.add(group);
+      viewer={renderer:renderer,scene:scene,camera:cam,group:group,sceneLights:[key,fill],raf:null,drag:false,px:0,zoom:0};
+      var rot=0.35;
+      function loop(){
+        viewer.raf=requestAnimationFrame(loop);
+        if(!viewer.drag)rot+=0.0026;
+        group.rotation.y=rot;
+        renderer.render(scene,cam);
+      }
+      loop();
+      canvas.addEventListener('pointerdown',function(e){viewer.drag=true;viewer.px=e.clientX;canvas.setPointerCapture(e.pointerId);e.preventDefault();});
+      canvas.addEventListener('pointermove',function(e){if(!viewer.drag)return;rot+=(e.clientX-viewer.px)*0.012;viewer.px=e.clientX;e.preventDefault();});
+      canvas.addEventListener('pointerup',function(e){viewer.drag=false;canvas.releasePointerCapture(e.pointerId);});
+      canvas.addEventListener('pointercancel',function(){viewer.drag=false;});
+      canvas.addEventListener('wheel',function(e){e.preventDefault();viewer.zoom=Math.max(-1.2,Math.min(4,viewer.zoom+(e.deltaY>0?-.3:.3)));cam.position.set(0,3+viewer.zoom*.85,5.3+viewer.zoom*.75);cam.updateProjectionMatrix();},{passive:false});
+      window.addEventListener('resize',function(){if(!viewer.renderer)return;var h=Math.max(160,Math.round(wrap.getBoundingClientRect().height));viewer.renderer.setSize(h*1.7,h,false);viewer.camera.aspect=1.7;viewer.camera.updateProjectionMatrix();});
+    }catch(e){
+      var body=document.getElementById('v2-modal-body');
+      if(body)body.innerHTML='<div class="v2-modal__info"><h3>'+esc(name)+'</h3><p>3D просмотр недоступен</p></div>';
     }
-    loop();
-
-    canvas.addEventListener('pointerdown',function(e){viewer.drag=true;viewer.px=e.clientX;canvas.setPointerCapture(e.pointerId);});
-    canvas.addEventListener('pointermove',function(e){
-      if(!viewer.drag)return;
-      rot+=(e.clientX-viewer.px)*0.012; viewer.px=e.clientX;
-    });
-    canvas.addEventListener('pointerup',function(){viewer.drag=false;});
-    canvas.addEventListener('pointercancel',function(){viewer.drag=false;});
   }
 
   /* ---------- Cooking "video" — procedural animated canvas film ---------- */
-  var player={timer:null,raf:null,step:0,steps:[],playing:false,dur:4200,start:0,t:0,ctx:null,cols:[C.green,C.lime]};
+  var player={timer:null,raf:null,step:0,steps:[],playing:false,dur:4200,start:0,t:0,ctx:null,cols:[C.green,C.lime],fps60:true,progressSmooth:true};
 
   function parseSteps(recipe){
     var raw=String(recipe||'').split(/\n+/).map(function(s){return s.trim();}).filter(Boolean);
@@ -218,7 +231,11 @@
       '<div class="v2-progress"><div class="v2-progress__bar" id="v2-bar"><div class="v2-progress__fill" id="v2-fill"></div></div>'+
       '<div class="v2-progress__meta"><span id="v2-step-now">Шаг 1</span><span id="v2-step-count">из '+player.steps.length+'</span></div></div></div>';
     var c=document.getElementById('film-canvas');player.ctx=c.getContext('2d');
-    drawKitchen(player.ctx,c.width,c.height,0,0,player.steps.length,player.cols);
+    var W=Math.min(520,Math.max(220,Math.round(c.clientWidth||520)));
+    var H=Math.min(330,Math.max(150,Math.round(c.clientHeight||330)));
+    c.width=Math.round(W*(window.devicePixelRatio||1));c.height=Math.round(H*(window.devicePixelRatio||1));
+    player.ctx.scale(window.devicePixelRatio||1,window.devicePixelRatio||1);
+    drawKitchen(player.ctx,W,H,0,0,player.steps.length,player.cols);
     showStep(0);
     document.getElementById('v2-play').addEventListener('click',togglePlay);
     document.getElementById('v2-bar').addEventListener('click',function(e){
@@ -261,11 +278,14 @@
   }
   function closeModal(){
     var m=document.getElementById('v2-modal'); if(m)m.classList.add('hidden');
-    if(viewer.raf){cancelAnimationFrame(viewer.raf);viewer.raf=null;}
+    closeViewer();
     if(player.timer){clearInterval(player.timer);player.timer=null;}
     if(player.raf){cancelAnimationFrame(player.raf);player.raf=null;}
     player.playing=false;
+    player.ctx=null;
+    var closeBtn=document.getElementById('v2-modal-close'); if(closeBtn&&m&&m.getBoundingClientRect().width)closeBtn.focus();
   }
+  document.addEventListener('keydown',function(e){if(e.key==='Escape')closeModal();});
 
   function esc(s){return String(s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
 
@@ -295,8 +315,8 @@
 
       // action chips
       var acts=document.createElement('div'); acts.className='v2-actions';
-      acts.innerHTML='<button class="v2-chip" data-act="3d">🧊 3D модель</button>'+
-        '<button class="v2-chip v2-chip--vid" data-act="video">🎬 Как готовить</button>';
+      acts.innerHTML='<button type="button" class="v2-chip" data-act="3d" aria-label="3D модель блюда">🧊 3D модель</button>'+
+        '<button type="button" class="v2-chip v2-chip--vid" data-act="video" aria-label="Видео-инструкция приготовления">🎬 Как готовить</button>';
       card.appendChild(acts);
       acts.querySelector('[data-act="3d"]').addEventListener('click',function(){
         ensureModal(); open3D(name);

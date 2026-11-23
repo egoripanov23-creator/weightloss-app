@@ -444,6 +444,8 @@ function showScreen(name) {
 
 // ---------- Three.js Background ----------
 function initThree() {
+  if (!window.THREE) return;
+  try {
   const canvas = document.getElementById("bg-canvas");
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -532,6 +534,7 @@ function initThree() {
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
   });
+  } catch (e) { console.warn("Three background unavailable", e); }
 }
 
 // ---------- Render Screens ----------
@@ -1274,6 +1277,7 @@ function renderTracker() {
 function renderWeightChart(history) {
   const canvas = document.getElementById("weight-chart");
   if (!canvas) return;
+  if (!window.Chart) { canvas.classList.add("unavailable"); canvas.style.height="160px"; return; }
   const ctx = canvas.getContext("2d");
 
   if (window.weightChartInstance) {
@@ -1628,19 +1632,19 @@ function renderBottomNav() {
   const nav = document.createElement("div");
   nav.className = "bottom-nav";
   nav.innerHTML = `
-    <div class="bottom-nav__item active" data-screen="mealplan">
+    <div class="bottom-nav__item active" data-screen="mealplan" role="button" tabindex="0">
       <span class="bottom-nav__item__icon">🍽️</span>
       <span>Рацион</span>
     </div>
-    <div class="bottom-nav__item" data-screen="tracker">
+    <div class="bottom-nav__item" data-screen="tracker" role="button" tabindex="0">
       <span class="bottom-nav__item__icon">⚖️</span>
       <span>Вес</span>
     </div>
-    <div class="bottom-nav__item" data-screen="chat">
+    <div class="bottom-nav__item" data-screen="chat" role="button" tabindex="0">
       <span class="bottom-nav__item__icon">💬</span>
       <span>Чат</span>
     </div>
-    <div class="bottom-nav__item" data-screen="settings">
+    <div class="bottom-nav__item" data-screen="settings" role="button" tabindex="0">
       <span class="bottom-nav__item__icon">⚙️</span>
       <span>Настройки</span>
     </div>
@@ -1648,6 +1652,8 @@ function renderBottomNav() {
   document.getElementById("app").appendChild(nav);
 
   nav.querySelectorAll(".bottom-nav__item").forEach(item => {
+    item.setAttribute("aria-label", item.textContent.trim());
+    item.addEventListener("keydown", e => { if(e.key==="Enter"||e.key===" ") item.click(); });
     item.addEventListener("click", () => {
       const screen = item.dataset.screen;
       nav.querySelectorAll(".bottom-nav__item").forEach(i => i.classList.remove("active"));
