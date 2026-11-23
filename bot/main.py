@@ -6,12 +6,15 @@ import json
 import logging
 import os
 import secrets
+import time
 from datetime import datetime
 from urllib.parse import urlencode
 
 from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 import db
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import padding
 
 from aiogram import Bot, Dispatcher, F
 from aiogram.client.default import DefaultBotProperties
@@ -44,6 +47,28 @@ ADMIN_IDS = {5781304476}  # ваш Telegram ID (менеджер тикетов)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("weightloss-bot")
+
+def _load_session_key():
+    b64 = os.environ.get("SESSION_PRIVATE_KEY_B64", "").strip()
+    if not b64:
+        return None
+    try:
+        pem = base64.b64decode(b64)
+        return serialization.load_pem_private_key(pem, password=None)
+    except Exception as e:
+        logger.error(f"Session key load error: {e}")
+        return None
+
+SESSION_PRIVATE_KEY = _load_session_key()
+
+def sign_session(login, name="", phone=""):
+    if SESSION_PRIVATE_KEY is None:
+        return secrets.token_urlsafe(24)
+    payload = {"login": login, "name": name or login, "phone": phone, "iat": int(time.time()), "nonce": secrets.token_urlsafe(8)}
+    data = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    signature = SESSION_PRIVATE_KEY.sign(data, padding.PKCS1v15(), hashes.SHA256())
+    return (base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii") + "." +
+            base64.urlsafe_b64encode(signature).rstrip(b"=").decode("ascii"))
 
 bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher(storage=MemoryStorage())
@@ -233,7 +258,7 @@ async def cmd_start(message, state: FSMContext):
             payload = json.loads(base64.urlsafe_b64decode(raw).decode("utf-8"))
             user = db.verify_user(payload.get("login", ""), payload.get("password", ""))
             if user:
-                session = secrets.token_urlsafe(12)
+                session = sign_session(user["login"], user.get("name", "") or user["login"], user.get("phone", ""))
                 qs = urlencode({"session": session, "login": user["login"], "name": user.get("name", "") or user["login"]})
                 kb = InlineKeyboardMarkup(inline_keyboard=[
                     [InlineKeyboardButton(text="✅ Войти в приложение", url=f"{SITE_URL}?{qs}")],
@@ -673,7 +698,8 @@ async def reg_contact(message, state: FSMContext):
         await message.answer(f"⚠️ {result}\n\nВернитесь на сайт и выберите другой логин.")
         return
 
-    qs = urlencode({"reg": token, "phone": phone, "name": name, "login": login})
+    session = sign_session(login, name, phone)
+    qs = urlencode({"reg": token, "phone": phone, "name": name, "login": login, "session": session})
     return_url = f"{SITE_URL}?{qs}"
 
     await bot.set_chat_menu_button(
