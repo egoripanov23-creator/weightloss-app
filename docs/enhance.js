@@ -198,6 +198,8 @@
       if(player.step>=player.steps.length-1){togglePlay();return;}
       showStep(player.step+1);
     }
+    var fill=document.getElementById('v2-fill');
+    if(fill)fill.style.width=((player.step+Math.min(player.t/player.dur,1))/player.steps.length*100)+'%';
     var c=document.getElementById('film-canvas');
     if(c&&player.ctx)drawKitchen(player.ctx,c.width,c.height,player.t,player.step,player.steps.length,player.cols);
     player.raf=requestAnimationFrame(filmLoop);
@@ -227,13 +229,17 @@
   }
 
   function showStep(i){
-    player.step=i;
+    player.step=i;player.start=0;player.t=0;
     var t=document.getElementById('v2-step-text');if(t)t.textContent=player.steps[i]||'';
     var n=document.getElementById('v2-step-now');if(n)n.textContent='Шаг '+(i+1);
     var f=document.getElementById('v2-fill');if(f)f.style.width=((i+1)/player.steps.length*100)+'%';
+    var c=document.getElementById('film-canvas');
+    if(c&&player.ctx)drawKitchen(player.ctx,c.width,c.height,0,i,player.steps.length,player.cols);
   }
   function togglePlay(){
+    var replay=!player.playing&&player.step>=player.steps.length-1&&player.t>=player.dur;
     player.playing=!player.playing;
+    if(player.playing&&replay)showStep(0);
     var b=document.getElementById('v2-play');if(b)b.textContent=player.playing?'⏸':'▶';
     if(player.timer)clearInterval(player.timer);
     if(player.raf)cancelAnimationFrame(player.raf);
