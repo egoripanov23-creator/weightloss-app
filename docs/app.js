@@ -1066,6 +1066,17 @@ function renderMealPlan() {
         </div>
       </div>
 
+      <!-- Action buttons placed near the top so they are always visible -->
+      <div style="display: flex; gap: 10px; margin: 16px 0;">
+        <button class="btn btn-ghost" id="btn-regenerate" style="flex:1;">🔄 Ещё раз</button>
+        <button class="btn btn-primary" id="btn-open-chat" style="flex:1;">💬 Спросить ИИ</button>
+      </div>
+      <div class="cross-links" style="margin-top:0; margin-bottom:16px;">
+        ${isTelegram
+          ? `<button class="btn btn-ghost" id="btn-goto-site">🌐 Открыть сайт</button>`
+          : `<button class="btn btn-ghost" id="btn-goto-telegram">📱 Перейти в Telegram</button>`}
+      </div>
+
       ${plan.meals?.map((m, idx) => `
         <div class="meal-card" style="animation-delay: ${idx * 0.1}s;">
           <div class="meal-card__header">
@@ -1091,16 +1102,6 @@ function renderMealPlan() {
       `).join("") || ""}
 
       ${plan.tip ? `<div class="ai-message"><span class="ai-message__icon">💡</span>${plan.tip}</div>` : ""}
-
-      <div style="display: flex; gap: 12px; margin-top: 20px;">
-        <button class="btn btn-ghost btn-block" id="btn-regenerate">🔄 Составить ещё раз</button>
-      </div>
-      <button class="btn btn-primary btn-block" id="btn-open-chat" style="margin-top: 12px;">💬 Спросить ИИ о рационе</button>
-      <div class="cross-links">
-        ${isTelegram
-          ? `<button class="btn btn-ghost" id="btn-goto-site">🌐 Открыть сайт</button>`
-          : `<button class="btn btn-ghost" id="btn-goto-telegram">📱 Перейти в Telegram</button>`}
-      </div>
     </div>
   `;
 
