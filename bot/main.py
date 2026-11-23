@@ -33,9 +33,11 @@ from aiogram.types import (
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
 MINI_APP_URL = "https://aifoodbot.duckdns.org/"
 SITE_URL = "https://aifoodbot.duckdns.org/"
-TICKETS_FILE = os.path.join(os.path.dirname(__file__), "tickets.json")
-REVIEWS_FILE = os.path.join(os.path.dirname(__file__), "reviews.json")
-SOURCES_FILE = os.path.join(os.path.dirname(__file__), "sources.json")
+DATA_DIR = os.environ.get("DATA_DIR", os.path.dirname(__file__))
+os.makedirs(DATA_DIR, exist_ok=True)
+TICKETS_FILE = os.path.join(DATA_DIR, "tickets.json")
+REVIEWS_FILE = os.path.join(DATA_DIR, "reviews.json")
+SOURCES_FILE = os.path.join(DATA_DIR, "sources.json")
 
 # Admin IDs (manager) — ticket notifications are sent here.
 ADMIN_IDS = {5781304476}  # ваш Telegram ID (менеджер тикетов)
@@ -745,4 +747,15 @@ async def main():
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    # Auto-restart loop: if polling crashes (network error, Telegram hiccup),
+    # wait a few seconds and reconnect instead of dying.
+    async def run_forever():
+        while True:
+            try:
+                await main()
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.error(f"Bot crashed: {e}. Restarting in 5s...")
+                await asyncio.sleep(5)
+    asyncio.run(run_forever())

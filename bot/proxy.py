@@ -7,6 +7,7 @@ from aiohttp import web, ClientSession
 from dotenv import load_dotenv
 
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
+# In Docker, secrets come from env_file; load_dotenv above is a no-op there — fine.
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("proxy")

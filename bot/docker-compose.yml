@@ -1,0 +1,11 @@
+services:
+  weightloss-bot:
+    build: .
+    container_name: weightloss-bot
+    restart: always              # auto-start on reboot + auto-restart on crash
+    env_file:
+      - .env                     # BOT_TOKEN, AI_API_KEY
+    volumes:
+      - ./data:/app/data         # persistent database & tickets
+    environment:
+      - DATA_DIR=/app/data
