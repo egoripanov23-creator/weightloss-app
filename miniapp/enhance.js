@@ -259,6 +259,39 @@
     return m[1].split(',').map(function(s){return s.trim();}).filter(Boolean);
   }
   function ingredientChip(text){ return '<span class="v2-ingredient"><span class="v2-ingredient__icon">'+ingredientIcon(text)+'</span>'+esc(text)+'</span>'; }
+  function dishSearchTerm(name){
+    var n=(name||'').toLowerCase();
+    if(/борщ/.test(n)) return 'borscht';
+    if(/греч/.test(n)) return 'buckwheat';
+    if(/овсян/.test(n)) return 'oatmeal';
+    if(/куриц|грудк|индей|мяс/.test(n)) return 'chicken';
+    if(/рыб|лосос/.test(n)) return 'salmon';
+    if(/салат/.test(n)) return 'salad';
+    if(/суп/.test(n)) return 'soup';
+    if(/паст|макар/.test(n)) return 'pasta';
+    if(/рис/.test(n)) return 'rice';
+    if(/творог|йогурт/.test(n)) return 'yogurt';
+    if(/ягод|черник|клубник/.test(n)) return 'berries';
+    if(/яблок/.test(n)) return 'apple';
+    if(/банан/.test(n)) return 'banana';
+    if(/картоф/.test(n)) return 'potato';
+    if(/гриб/.test(n)) return 'mushroom';
+    return 'food';
+  }
+  async function fetchMealDb(term){
+    try{
+      var res=await fetch('https://www.themealdb.com/api/json/v1/1/search.php?s='+encodeURIComponent(term));
+      var data=await res.json();
+      var meals=data && data.meals;
+      if(meals && meals.length){
+        var m=meals[0];
+        var yt=m.strYoutube||'';
+        var embed=yt?yt.replace('watch?v=','embed/').replace('youtu.be/','youtube.com/embed/'):'';
+        return {title:m.strMeal, image:m.strMealThumb, video:embed};
+      }
+    }catch(e){}
+    return {title:'',image:'',video:''};
+  }
   function stepIcon(text){
     var t=(text||'').toLowerCase();
     if(/добав|полож|всып|влей|влив/.test(t)) return '➕';
@@ -276,21 +309,29 @@
     var seed=0; for(var i=0;i<name.length;i++) seed=(seed*31+name.charCodeAt(i))>>>0;
     return 'https://image.pollinations.ai/prompt/'+encodeURIComponent(prompt)+'?width=768&height=512&model=flux&nologo=true&enhance=true&seed='+seed;
   }
-  function openPhoto(name, recipe){
+  async function openPhoto(name, recipe){
     ensureModal();
     var wrap=document.getElementById('v2-modal');wrap.classList.remove('hidden');
     document.getElementById('v2-modal-title').textContent='🖼 '+name;
-    document.getElementById('v2-modal-sub').textContent='Реалистичное изображение блюда';
+    document.getElementById('v2-modal-sub').textContent='Реалистичное фото блюда · можно покрутить';
     var ingredients=parseIngredients(recipe);
     var ingHtml=ingredients.length?'<div class="v2-ingredients-title">Состав блюда</div><div class="v2-ingredients">'+ingredients.map(ingredientChip).join('')+'</div>':'';
     var body=document.getElementById('v2-modal-body');
-    var url=dishImageUrl(name,recipe);
-    body.innerHTML='<div class="v2-photo-wrap"><img class="v2-photo" src="'+url+'" alt="'+esc(name)+'"><div class="v2-photo-loading" id="v2-photo-loading">Генерируем реалистичное изображение…</div></div>'+
-      '<div class="v2-modal__info"><h3>'+esc(name)+'</h3><p>Изображение генерируется автоматически. Ниже — все ингредиенты блюда.</p>'+ingHtml+'</div>';
-    var img=body.querySelector('.v2-photo');
-    var loading=body.querySelector('#v2-photo-loading');
+    body.innerHTML='<div class="v2-photo3d-wrap"><div class="v2-photo3d" id="v2-photo3d"><div class="v2-photo-loading" id="v2-photo-loading">Загружаем реалистичное фото…</div></div></div>'+
+      '<div class="v2-modal__info"><h3>'+esc(name)+'</h3><p>Фото можно покрутить мышью или пальцем. Ниже — все ингредиенты.</p>'+ingHtml+'</div>';
+    var meal=await fetchMealDb(dishSearchTerm(name));
+    var url=meal.image || dishImageUrl(name,recipe);
+    var box=document.getElementById('v2-photo3d');
+    box.innerHTML='<img class="v2-photo3d__img" src="'+url+'" alt="'+esc(name)+'">';
+    var img=box.querySelector('img');
+    var loading=document.getElementById('v2-photo-loading');
     img.onload=function(){ if(loading) loading.style.display='none'; };
-    img.onerror=function(){ open3D(name,recipe); };
+    img.onerror=function(){ box.innerHTML='<div class="v2-photo-loading">Не удалось загрузить фото</div>'; };
+    var rx=0, ry=0, dragging=false, px=0, py=0;
+    box.addEventListener('pointerdown',function(e){dragging=true;px=e.clientX;py=e.clientY;box.setPointerCapture(e.pointerId);});
+    box.addEventListener('pointermove',function(e){if(!dragging)return;ry+=(e.clientX-px)*0.5;rx-=(e.clientY-py)*0.5;rx=Math.max(-25,Math.min(25,rx));ry=Math.max(-35,Math.min(35,ry));px=e.clientX;py=e.clientY;box.style.transform='rotateX('+rx+'deg) rotateY('+ry+'deg)';});
+    box.addEventListener('pointerup',function(e){dragging=false;box.releasePointerCapture(e.pointerId);});
+    box.addEventListener('pointercancel',function(){dragging=false;});
   }
   function parseSteps(recipe){
     var raw=String(recipe||'').split(/\n+/).map(function(s){return s.trim();}).filter(Boolean);
@@ -465,27 +506,38 @@
     player.raf=requestAnimationFrame(filmLoop);
   }
 
-  function openVideo(name,recipe){
+  async function openVideo(name,recipe){
     var wrap=document.getElementById('v2-modal');wrap.classList.remove('hidden');
     document.getElementById('v2-modal-title').textContent='🎬 '+name;
     document.getElementById('v2-modal-sub').textContent='Пошаговый видеогайд';
     player.steps=parseSteps(recipe);player.step=0;player.playing=false;player.ingredients=parseIngredients(recipe);
+    var meal=await fetchMealDb(dishSearchTerm(name));
     var body=document.getElementById('v2-modal-body');
     var ingHtml=player.ingredients.length?'<div class="v2-ingredients-title">Что понадобится</div><div class="v2-ingredients">'+player.ingredients.map(ingredientChip).join('')+'</div>':'';
-    body.innerHTML=
-      '<div class="v2-player" style="padding:0"><canvas id="film-canvas" width="520" height="360" style="width:100%;height:360px;display:block;border-radius:22px 22px 0 0"></canvas></div>'+
-      ingHtml+
-      '<div class="v2-step-card" id="v2-step-card"><span class="v2-step-card__icon" id="v2-step-icon">🍳</span><span class="v2-step-card__text" id="v2-step-text"></span></div>'+
-      '<div class="v2-controls"><button class="v2-play" id="v2-play">▶</button>'+
-      '<div class="v2-progress"><div class="v2-progress__bar" id="v2-bar"><div class="v2-progress__fill" id="v2-fill"></div></div>'+
-      '<div class="v2-progress__meta"><span id="v2-step-now">Шаг 1</span><span id="v2-step-count">из '+player.steps.length+'</span></div></div></div>';
-    var c=document.getElementById('film-canvas');player.ctx=c.getContext('2d');
-    var W=Math.min(520,Math.max(220,Math.round(c.clientWidth||520)));
-    var H=Math.min(360,Math.max(220,Math.round(c.clientHeight||360)));
-    player.canvasW=W; player.canvasH=H;
-    c.width=Math.round(W*(window.devicePixelRatio||1));c.height=Math.round(H*(window.devicePixelRatio||1));
-    player.ctx.scale(window.devicePixelRatio||1,window.devicePixelRatio||1);
-    drawKitchen(player.ctx,W,H,0,0,player.steps.length,player.cols,stepIcon(player.steps[0]||''));
+    if(meal.video){
+      body.innerHTML=
+        '<div class="v2-video-frame-wrap"><iframe class="v2-video-frame" src="'+meal.video+'" title="Видео приготовления" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div>'+
+        ingHtml+
+        '<div class="v2-step-card" id="v2-step-card"><span class="v2-step-card__icon" id="v2-step-icon">🍳</span><span class="v2-step-card__text" id="v2-step-text"></span></div>'+
+        '<div class="v2-controls"><button class="v2-play" id="v2-play">▶</button>'+
+        '<div class="v2-progress"><div class="v2-progress__bar" id="v2-bar"><div class="v2-progress__fill" id="v2-fill"></div></div>'+
+        '<div class="v2-progress__meta"><span id="v2-step-now">Шаг 1</span><span id="v2-step-count">из '+player.steps.length+'</span></div></div></div>';
+    } else {
+      body.innerHTML=
+        '<div class="v2-player" style="padding:0"><canvas id="film-canvas" width="520" height="360" style="width:100%;height:360px;display:block;border-radius:22px 22px 0 0"></canvas></div>'+
+        ingHtml+
+        '<div class="v2-step-card" id="v2-step-card"><span class="v2-step-card__icon" id="v2-step-icon">🍳</span><span class="v2-step-card__text" id="v2-step-text"></span></div>'+
+        '<div class="v2-controls"><button class="v2-play" id="v2-play">▶</button>'+
+        '<div class="v2-progress"><div class="v2-progress__bar" id="v2-bar"><div class="v2-progress__fill" id="v2-fill"></div></div>'+
+        '<div class="v2-progress__meta"><span id="v2-step-now">Шаг 1</span><span id="v2-step-count">из '+player.steps.length+'</span></div></div></div>';
+      var c=document.getElementById('film-canvas');player.ctx=c.getContext('2d');
+      var W=Math.min(520,Math.max(220,Math.round(c.clientWidth||520)));
+      var H=Math.min(360,Math.max(220,Math.round(c.clientHeight||360)));
+      player.canvasW=W;player.canvasH=H;
+      c.width=Math.round(W*(window.devicePixelRatio||1));c.height=Math.round(H*(window.devicePixelRatio||1));
+      player.ctx.scale(window.devicePixelRatio||1,window.devicePixelRatio||1);
+      drawKitchen(player.ctx,W,H,0,0,player.steps.length,player.cols,stepIcon(player.steps[0]||''));
+    }
     showStep(0);
     document.getElementById('v2-play').addEventListener('click',togglePlay);
     document.getElementById('v2-bar').addEventListener('click',function(e){
