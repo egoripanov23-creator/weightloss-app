@@ -2,39 +2,62 @@
    ENHANCE v2 — ultra-smooth modern restyle + 3D dish + cooking video
    ============================================================ */
 :root{
-  /* Green-blue + pink theme */
-  --bg:#07151b;
-  --bg-2:#0b2028;
-  --surface:rgba(10,36,45,.72);
-  --surface-2:rgba(12,44,54,.82);
-  --border:rgba(45,212,191,.18);
-  --border-strong:rgba(56,189,248,.26);
-  --text:#f3fdff;
-  --muted:#96b8c2;
-  --accent:#2dd4bf;
-  --accent-2:#38bdf8;
-  --accent-glow:rgba(45,212,191,.32);
-  --danger:#fb7185;
-  --warning:#fbbf24;
-  --info:#60a5fa;
-  --v2-bg:#07151b;
-  --v2-surface:rgba(10,36,45,.74);
-  --v2-border:rgba(45,212,191,.18);
-  --v2-accent:#2dd4bf;
-  --v2-accent2:#fb7185;
-  --v2-text:#f3fdff;
-  --v2-muted:#96b8c2;
-  --spring:cubic-bezier(.22,1.4,.36,1);
-  --smooth:cubic-bezier(.4,0,.2,1);
+  /* Calmer human-made palette: slate + muted teal + soft blue + restrained rose */
+  --bg:#101820;
+  --bg-2:#18232d;
+  --surface:rgba(24,35,45,.86);
+  --surface-2:rgba(30,44,56,.92);
+  --border:rgba(148,163,184,.16);
+  --border-strong:rgba(148,163,184,.28);
+  --text:#eef4f7;
+  --muted:#a7b6c2;
+  --accent:#3a9b8f;
+  --accent-2:#5b8def;
+  --accent-glow:rgba(58,155,143,.18);
+  --danger:#e56b7a;
+  --warning:#d9a441;
+  --info:#7aa7e8;
+  --v2-bg:#101820;
+  --v2-surface:rgba(24,35,45,.88);
+  --v2-border:rgba(148,163,184,.16);
+  --v2-accent:#3a9b8f;
+  --v2-accent2:#5b8def;
+  --v2-text:#eef4f7;
+  --v2-muted:#a7b6c2;
+  --spring:cubic-bezier(.2,0,.2,1);
+  --smooth:cubic-bezier(.25,.1,.25,1);
 }
 body.v2{
-  background:
-    radial-gradient(1200px 700px at 15% -10%, rgba(45,212,191,.16), transparent 60%),
-    radial-gradient(900px 600px at 90% 10%, rgba(56,189,248,.14), transparent 55%),
-    radial-gradient(700px 500px at 50% 110%, rgba(251,113,133,.10), transparent 60%),
-    linear-gradient(180deg,#07151b,#040b10);
+  background:#101820;
   color:var(--v2-text);
 }
+/* Remove the decorative animated background that reads as AI-generated. */
+#bg-canvas{display:none !important;}
+/* Calmer surfaces: less glass, less blur, less radius. */
+body.v2 .glass,
+body.v2 .meal-card,
+body.v2 .widget{
+  backdrop-filter:none !important;
+  -webkit-backdrop-filter:none !important;
+  box-shadow:0 8px 24px rgba(0,0,0,.28);
+  border-radius:14px;
+}
+body.v2 .glass{background:var(--v2-surface);}
+body.v2 .btn{border-radius:10px; letter-spacing:0;}
+body.v2 .btn-primary{background:var(--v2-accent);color:#081114;}
+body.v2 .btn-primary:hover{background:#46aba0;transform:translateY(-1px);}
+body.v2 .grad{background:none !important; -webkit-background-clip:initial !important; background-clip:initial !important; color:var(--v2-accent) !important;}
+body.v2 .meal-card{background:#17232e; animation:v2-card .35s ease both;}
+@keyframes v2-card{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+body.v2 .bottom-nav{background:#0c1319;border-top:1px solid var(--v2-border);backdrop-filter:none;}
+body.v2 .v2-modal{background:rgba(8,12,16,.82);backdrop-filter:blur(4px);}
+body.v2 .v2-modal__card{background:#151f28;border-radius:16px;}
+body.v2 .v2-chip{border-radius:8px;}
+body.v2 .v2-chip:hover{transform:none;background:rgba(58,155,143,.16);}
+/* Reduce motion-heavy feel. */
+body.v2 .animate-in{animation:v2-in .3s ease both;}
+@keyframes v2-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){body.v2 *{animation:none !important;transition-duration:.01ms !important;}}
 body.v2 .glass{
   background:var(--v2-surface);
   border:1px solid var(--v2-border);
