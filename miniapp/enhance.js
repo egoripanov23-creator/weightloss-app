@@ -401,7 +401,7 @@
       canvas.addEventListener('pointerup',function(){viewer.drag=false;});
       canvas.addEventListener('pointercancel',function(){viewer.drag=false;});
       canvas.addEventListener('wheel',function(e){e.preventDefault();viewer.zoom=Math.max(-1.5,Math.min(3,viewer.zoom+(e.deltaY>0?-.25:.25)));cam.position.z=6.2-viewer.zoom;},{passive:false});
-    },undefined,function(){ body.querySelector('.v2-modal__info').insertAdjacentHTML('beforeend','<p style="color:var(--v2-muted);font-size:.75rem;margin-top:8px;">Не удалось загрузить 3D-фото, показан запасной вариант.</p>'); });
+    },undefined,function(){ var fallback=buildDish(name); group.add(fallback); body.querySelector('.v2-modal__info').insertAdjacentHTML('beforeend','<p style="color:var(--v2-muted);font-size:.75rem;margin-top:8px;">Фото не загрузилось, показана 3D-модель.</p>'); });
   }
   function parseSteps(recipe){
     var raw=String(recipe||'').split(/\n+/).map(function(s){return s.trim();}).filter(Boolean);
