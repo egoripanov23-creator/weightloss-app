@@ -261,9 +261,9 @@
   function ingredientChip(text){ return '<span class="v2-ingredient"><span class="v2-ingredient__icon">'+ingredientIcon(text)+'</span>'+esc(text)+'</span>'; }
   function dishImageUrl(name, recipe){
     var ingredients=parseIngredients(recipe).join(', ');
-    var prompt='cartoon-realistic 3D food illustration of '+name+', ingredients: '+ingredients+', modern clean background, soft studio lighting, appetizing, high detail, smooth rounded shapes';
+    var prompt='cartoon-realistic 3D food illustration of '+name+', ingredients: '+ingredients+', clean studio background, soft lighting, appetizing, high detail, smooth rounded shapes, modern food render, no text';
     var seed=0; for(var i=0;i<name.length;i++) seed=(seed*31+name.charCodeAt(i))>>>0;
-    return 'https://image.pollinations.ai/prompt/'+encodeURIComponent(prompt)+'?width=768&height=512&nologo=true&seed='+seed;
+    return 'https://image.pollinations.ai/prompt/'+encodeURIComponent(prompt)+'?width=768&height=512&model=flux&nologo=true&enhance=true&seed='+seed;
   }
   function openPhoto(name, recipe){
     ensureModal();
