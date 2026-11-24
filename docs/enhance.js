@@ -223,7 +223,7 @@
   }
 
   /* ---------- Cooking "video" — procedural animated canvas film ---------- */
-  var player={timer:null,raf:null,step:0,steps:[],playing:false,dur:4200,start:0,t:0,ctx:null,cols:[C.green,C.lime],fps60:true,progressSmooth:true};
+  var player={timer:null,raf:null,step:0,steps:[],playing:false,dur:7000,start:0,t:0,ctx:null,cols:[C.green,C.lime],fps60:true,progressSmooth:true};
 
   function ingredientIcon(text){
     var t=(text||'').toLowerCase();
@@ -310,7 +310,7 @@
     return 'https://image.pollinations.ai/prompt/'+encodeURIComponent(prompt)+'?width=768&height=512&model=flux&nologo=true&enhance=true&seed='+seed;
   }
   function stepImageUrl(name, stepText){
-    var prompt='cartoon-realistic cooking step: '+stepText+' for '+name+', modern kitchen, hands adding ingredients, steam, warm lighting, high detail, no text';
+    var prompt='close-up cooking step: '+stepText+', '+name+', food in pan, realistic kitchen, hands adding ingredient, steam, warm lighting, high detail photo, no text';
     var seed=0; for(var i=0;i<(name+stepText).length;i++) seed=(seed*31+(name+stepText).charCodeAt(i))>>>0;
     return 'https://image.pollinations.ai/prompt/'+encodeURIComponent(prompt)+'?width=768&height=512&model=flux&nologo=true&enhance=true&seed='+seed;
   }
@@ -540,6 +540,7 @@
       var r=this.getBoundingClientRect();
       var i=Math.floor((e.clientX-r.left)/r.width*player.steps.length);
       showStep(Math.max(0,Math.min(player.steps.length-1,i)));
+      if(player.playing) scheduleAdvance();
     });
   }
 
@@ -552,6 +553,21 @@
     var f=document.getElementById('v2-fill');if(f)f.style.width=((i+1)/player.steps.length*100)+'%';
     var card=document.getElementById('v2-step-card');if(card){card.classList.remove('v2-step-card--pop');void card.offsetWidth;card.classList.add('v2-step-card--pop');}
   }
+  function advanceStep(){
+    if(!player.playing) return;
+    if(player.step>=player.steps.length-1){togglePlay();return;}
+    showStep(player.step+1);
+    scheduleAdvance();
+  }
+  function scheduleAdvance(){
+    if(!player.playing) return;
+    if(player.advanceTimer) clearTimeout(player.advanceTimer);
+    var img=document.getElementById('v2-step-image');
+    var done=false;
+    function go(){ if(done) return; done=true; player.advanceTimer=setTimeout(advanceStep, player.dur); }
+    if(img && !img.complete){ img.onload=function(){ img.onload=null; go(); }; player.advanceTimer=setTimeout(go, player.dur+3000); }
+    else { player.advanceTimer=setTimeout(go, player.dur); }
+  }
   function togglePlay(){
     var replay=!player.playing&&player.step>=player.steps.length-1;
     player.playing=!player.playing;
@@ -559,12 +575,8 @@
     var b=document.getElementById('v2-play');if(b)b.textContent=player.playing?'⏸':'▶';
     if(player.timer)clearInterval(player.timer);
     if(player.raf)cancelAnimationFrame(player.raf);
-    if(player.playing){
-      player.timer=setInterval(function(){
-        if(player.step>=player.steps.length-1){togglePlay();return;}
-        showStep(player.step+1);
-      },player.dur);
-    }
+    if(player.advanceTimer)clearTimeout(player.advanceTimer);
+    if(player.playing){ scheduleAdvance(); }
   }
 
   /* ---------- modal shell ---------- */
