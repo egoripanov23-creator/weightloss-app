@@ -74,6 +74,23 @@ def sign_session(login, name="", phone=""):
     return (base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii") + "." +
             base64.urlsafe_b64encode(signature).rstrip(b"=").decode("ascii"))
 
+def verify_session_token(token):
+    if not token or not isinstance(token, str) or "." not in token:
+        return None
+    try:
+        payload_b64, sig_b64 = token.split(".", 1)
+        payload = base64.urlsafe_b64decode(payload_b64 + "=" * (-len(payload_b64) % 4))
+        signature = base64.urlsafe_b64decode(sig_b64 + "=" * (-len(sig_b64) % 4))
+        SESSION_PRIVATE_KEY.public_key().verify(signature, payload, padding.PKCS1v15(), hashes.SHA256())
+        data = json.loads(payload.decode("utf-8"))
+        if time.time() - float(data.get("iat", 0)) > 30 * 24 * 3600:
+            return None
+        if not data.get("login"):
+            return None
+        return data
+    except Exception:
+        return None
+
 bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher(storage=MemoryStorage())
 
@@ -587,6 +604,44 @@ async def show_my_tickets(message):
     await message.answer(text, reply_markup=manager_keyboard())
 
 
+async def create_ticket_record(login, name, text, category="other", subject=""):
+    tickets = load_tickets()
+    tid = next_ticket_id(tickets)
+    ticket = {
+        "id": tid,
+        "user_id": 0,
+        "login": login,
+        "name": name or login,
+        "username": login,
+        "category": category,
+        "subject": subject or text[:60],
+        "text": text,
+        "status": "open",
+        "created_at": datetime.now().isoformat(),
+    }
+    tickets.append(ticket)
+    save_tickets(tickets)
+
+    cat_name = TICKET_CATEGORIES.get(category, "📝 Другое")
+    admin_kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=f"💬 Ответить №{tid}", callback_data=f"admin_reply_{tid}")],
+        [InlineKeyboardButton(text=f"⚪ Закрыть №{tid}", callback_data=f"admin_close_{tid}")],
+    ])
+    for admin_id in ADMIN_IDS:
+        try:
+            await bot.send_message(
+                admin_id,
+                f"🎫 <b>Новый тикет №{tid}</b>\n"
+                f"От: {ticket['name']} (@{ticket['username']})\n"
+                f"Категория: {cat_name}\nТема: {ticket['subject']}\n\n"
+                f"{text[:500]}\n\n"
+                f"Ответить: /reply {tid} ваш_ответ\nЗакрыть: /close {tid}",
+                reply_markup=admin_kb,
+            )
+        except Exception as e:
+            logger.error(f"Failed to notify admin {admin_id}: {e}")
+    return ticket
+
 async def save_new_ticket(message, text, category="other", subject=""):
     """Create a ticket and notify admins with action buttons."""
     tickets = load_tickets()
@@ -800,17 +855,48 @@ async def handle_login(request):
         "user": {"login": user["login"], "name": user.get("name") or user["login"], "phone": user.get("phone", ""), "email": user.get("email", "")},
     }, headers={"Access-Control-Allow-Origin": "*"})
 
+async def handle_create_ticket(request):
+    try:
+        data = await request.json()
+    except Exception:
+        return web.json_response({"error": "bad json"}, status=400, headers={"Access-Control-Allow-Origin": "*"})
+    session_data = verify_session_token(data.get("session"))
+    if not session_data:
+        return web.json_response({"error": "unauthorized"}, status=401, headers={"Access-Control-Allow-Origin": "*"})
+    text = (data.get("text") or data.get("subject") or "").strip()
+    if not text:
+        return web.json_response({"error": "text is required"}, status=400, headers={"Access-Control-Allow-Origin": "*"})
+    category = (data.get("category") or "other").strip()
+    subject = (data.get("subject") or text[:60]).strip()
+    ticket = await create_ticket_record(session_data["login"], session_data.get("name") or session_data["login"], text, category, subject)
+    return web.json_response({"ok": True, "ticket": ticket}, headers={"Access-Control-Allow-Origin": "*"})
+
+async def handle_list_tickets(request):
+    session = request.query.get("session") or ""
+    session_data = verify_session_token(session)
+    if not session_data:
+        return web.json_response({"error": "unauthorized"}, status=401, headers={"Access-Control-Allow-Origin": "*"})
+    tickets = [t for t in load_tickets() if t.get("login") == session_data["login"]]
+    return web.json_response({"tickets": tickets}, headers={"Access-Control-Allow-Origin": "*"})
+
 async def start_api():
     app = web.Application()
     app.router.add_get("/api/health", handle_health)
     app.router.add_post("/api/auth/register/pending", handle_pending_registration)
     app.router.add_post("/api/auth/login", handle_login)
+    app.router.add_post("/api/tickets/create", handle_create_ticket)
+    app.router.add_get("/api/tickets", handle_list_tickets)
     app.router.add_options("/api/auth/register/pending", lambda r: web.Response(headers={
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "POST, OPTIONS",
         "Access-Control-Allow-Headers": "Content-Type",
     }))
     app.router.add_options("/api/auth/login", lambda r: web.Response(headers={
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type",
+    }))
+    app.router.add_options("/api/tickets/create", lambda r: web.Response(headers={
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "POST, OPTIONS",
         "Access-Control-Allow-Headers": "Content-Type",
