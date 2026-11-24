@@ -1810,10 +1810,20 @@ function initSupport() {
 
   const open = () => {
     sheet.classList.remove("hidden");
-    renderTicketList();
-    updateTicketCount();
+    syncTickets().then(() => { renderTicketList(); updateTicketCount(); });
     if (tgSupports("HapticFeedback") && tg?.HapticFeedback) { try { tg.HapticFeedback.impactOccurred("light"); } catch(e){} }
   };
+  async function syncTickets() {
+    if (!state.user?.session) return;
+    try {
+      const res = await fetch(API_BASE + "/api/tickets?session=" + encodeURIComponent(state.user.session));
+      const data = await res.json();
+      if (res.ok && Array.isArray(data.tickets)) {
+        localStorage.setItem("app_tickets", JSON.stringify(data.tickets));
+        updateTicketCount();
+      }
+    } catch (e) {}
+  }
   const hide = () => sheet.classList.add("hidden");
   btn.addEventListener("click", open);
   if (close) close.addEventListener("click", hide);
@@ -1828,13 +1838,13 @@ function initSupport() {
       const newContent = document.getElementById("ticket-tab-new");
       const myContent = document.getElementById("ticket-tab-my");
       if (which === "new") { newContent.classList.remove("hidden"); myContent.classList.add("hidden"); }
-      else { newContent.classList.add("hidden"); myContent.classList.remove("hidden"); renderTicketList(); }
+      else { newContent.classList.add("hidden"); myContent.classList.remove("hidden"); syncTickets().then(renderTicketList); }
     });
   });
 
   // Submit ticket → deep-link into bot which creates it
   const submit = document.getElementById("ticket-submit");
-  if (submit) submit.addEventListener("click", () => {
+  if (submit) submit.addEventListener("click", async () => {
     const category = document.getElementById("ticket-category").value;
     const subject = document.getElementById("ticket-subject").value.trim();
     const text = document.getElementById("ticket-text").value.trim();
@@ -1842,28 +1852,31 @@ function initSupport() {
       if (tg) tg.showAlert("Введите сообщение"); else alert("Введите сообщение");
       return;
     }
-    const list = loadTickets();
-    const tid = list.length ? Math.max(...list.map(t => t.id)) + 1 : 1;
-    list.push({
-      id: tid,
-      subject: subject || text.substring(0, 50),
-      text: text || subject,
-      category, status: "open", created_at: new Date().toISOString(),
-    });
-    saveTickets(list);
-    renderTicketList();
-
-    const payload = btoa(unescape(encodeURIComponent(JSON.stringify({ text: text || subject, category, subject }))))
-      .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-    const link = `https://t.me/foodAi1_bot?start=ticket_${payload}`;
-    openTelegramLink(link);
-
-    // clear form
-    document.getElementById("ticket-subject").value = "";
-    document.getElementById("ticket-text").value = "";
-    // switch to "my" tab
-    const myTab = document.querySelector('.ticket-tab[data-tab="my"]');
-    if (myTab) myTab.click();
+    if (!state.user?.session) {
+      if (tg) tg.showAlert("Сначала войдите в аккаунт"); else alert("Сначала войдите в аккаунт");
+      return;
+    }
+    try {
+      const res = await fetch(API_BASE + "/api/tickets/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session: state.user.session, category, subject, text: text || subject }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ticket) throw new Error(data.error || "ticket failed");
+      const list = loadTickets();
+      list.push(data.ticket);
+      saveTickets(list);
+      renderTicketList();
+      document.getElementById("ticket-subject").value = "";
+      document.getElementById("ticket-text").value = "";
+      const myTab = document.querySelector('.ticket-tab[data-tab="my"]');
+      if (myTab) myTab.click();
+      if (tg) tg.showAlert(`Тикет №${data.ticket.id} отправлен менеджеру`);
+    } catch (e) {
+      const msg = "Не удалось отправить тикет. Попробуйте позже.";
+      if (tg) tg.showAlert(msg); else alert(msg);
+    }
   });
 
   // Open bot button
