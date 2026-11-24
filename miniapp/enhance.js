@@ -259,6 +259,27 @@
     return m[1].split(',').map(function(s){return s.trim();}).filter(Boolean);
   }
   function ingredientChip(text){ return '<span class="v2-ingredient"><span class="v2-ingredient__icon">'+ingredientIcon(text)+'</span>'+esc(text)+'</span>'; }
+  function dishImageUrl(name, recipe){
+    var ingredients=parseIngredients(recipe).join(', ');
+    var prompt='cartoon-realistic 3D food illustration of '+name+', ingredients: '+ingredients+', modern clean background, soft studio lighting, appetizing, high detail, smooth rounded shapes';
+    var seed=0; for(var i=0;i<name.length;i++) seed=(seed*31+name.charCodeAt(i))>>>0;
+    return 'https://image.pollinations.ai/prompt/'+encodeURIComponent(prompt)+'?width=768&height=512&nologo=true&seed='+seed;
+  }
+  function openPhoto(name, recipe){
+    ensureModal();
+    document.getElementById('v2-modal-title').textContent='🖼 '+name;
+    document.getElementById('v2-modal-sub').textContent='Реалистичное изображение блюда';
+    var ingredients=parseIngredients(recipe);
+    var ingHtml=ingredients.length?'<div class="v2-ingredients-title">Состав блюда</div><div class="v2-ingredients">'+ingredients.map(ingredientChip).join('')+'</div>':'';
+    var body=document.getElementById('v2-modal-body');
+    var url=dishImageUrl(name,recipe);
+    body.innerHTML='<div class="v2-photo-wrap"><img class="v2-photo" src="'+url+'" alt="'+esc(name)+'"><div class="v2-photo-loading" id="v2-photo-loading">Генерируем реалистичное изображение…</div></div>'+
+      '<div class="v2-modal__info"><h3>'+esc(name)+'</h3><p>Изображение генерируется автоматически. Ниже — все ингредиенты блюда.</p>'+ingHtml+'</div>';
+    var img=body.querySelector('.v2-photo');
+    var loading=body.querySelector('#v2-photo-loading');
+    img.onload=function(){ if(loading) loading.style.display='none'; };
+    img.onerror=function(){ open3D(name,recipe); };
+  }
   function parseSteps(recipe){
     var raw=String(recipe||'').split(/\n+/).map(function(s){return s.trim();}).filter(Boolean);
     var steps=[];
@@ -426,24 +447,22 @@
   function openVideo(name,recipe){
     var wrap=document.getElementById('v2-modal');wrap.classList.remove('hidden');
     document.getElementById('v2-modal-title').textContent='🎬 '+name;
-    document.getElementById('v2-modal-sub').textContent='Видео-инструкция · пошаговое приготовление';
-    player.steps=parseSteps(recipe);player.step=0;player.playing=false;player.cols=dishColor(name);
-    player.ingredients=parseIngredients(recipe);
+    document.getElementById('v2-modal-sub').textContent='Пошаговый видеогайд';
+    player.steps=parseSteps(recipe);player.step=0;player.playing=false;player.ingredients=parseIngredients(recipe);
     var body=document.getElementById('v2-modal-body');
+    var url=dishImageUrl(name,recipe);
     var ingHtml=player.ingredients.length?'<div class="v2-ingredients-title">Что понадобится</div><div class="v2-ingredients">'+player.ingredients.map(ingredientChip).join('')+'</div>':'';
     body.innerHTML=
-      '<div class="v2-player" style="padding:0"><canvas id="film-canvas" width="520" height="360" style="width:100%;height:360px;display:block;border-radius:22px 22px 0 0"></canvas></div>'+
+      '<div class="v2-photo-wrap v2-photo-wrap--video"><img class="v2-photo v2-photo--kenburns" src="'+url+'" alt="'+esc(name)+'"><div class="v2-photo-loading" id="v2-photo-loading">Генерируем реалистичное видео-превью…</div><div class="v2-video-overlay"></div></div>'+
       ingHtml+
       '<div class="v2-step-text" id="v2-step-text"></div>'+
       '<div class="v2-controls"><button class="v2-play" id="v2-play">▶</button>'+
       '<div class="v2-progress"><div class="v2-progress__bar" id="v2-bar"><div class="v2-progress__fill" id="v2-fill"></div></div>'+
       '<div class="v2-progress__meta"><span id="v2-step-now">Шаг 1</span><span id="v2-step-count">из '+player.steps.length+'</span></div></div></div>';
-    var c=document.getElementById('film-canvas');player.ctx=c.getContext('2d');
-    var W=Math.min(520,Math.max(220,Math.round(c.clientWidth||520)));
-    var H=Math.min(360,Math.max(220,Math.round(c.clientHeight||360)));
-    c.width=Math.round(W*(window.devicePixelRatio||1));c.height=Math.round(H*(window.devicePixelRatio||1));
-    player.ctx.scale(window.devicePixelRatio||1,window.devicePixelRatio||1);
-    drawKitchen(player.ctx,W,H,0,0,player.steps.length,player.cols);
+    var img=body.querySelector('.v2-photo');
+    var loading=body.querySelector('#v2-photo-loading');
+    img.onload=function(){ if(loading) loading.style.display='none'; };
+    img.onerror=function(){ if(loading) loading.textContent='Не удалось загрузить превью'; };
     showStep(0);
     document.getElementById('v2-play').addEventListener('click',togglePlay);
     document.getElementById('v2-bar').addEventListener('click',function(e){
@@ -458,17 +477,20 @@
     var t=document.getElementById('v2-step-text');if(t)t.textContent=player.steps[i]||'';
     var n=document.getElementById('v2-step-now');if(n)n.textContent='Шаг '+(i+1);
     var f=document.getElementById('v2-fill');if(f)f.style.width=((i+1)/player.steps.length*100)+'%';
-    var c=document.getElementById('film-canvas');
-    if(c&&player.ctx)drawKitchen(player.ctx,c.width,c.height,0,i,player.steps.length,player.cols);
   }
   function togglePlay(){
-    var replay=!player.playing&&player.step>=player.steps.length-1&&player.t>=player.dur;
+    var replay=!player.playing&&player.step>=player.steps.length-1;
     player.playing=!player.playing;
     if(player.playing&&replay)showStep(0);
     var b=document.getElementById('v2-play');if(b)b.textContent=player.playing?'⏸':'▶';
     if(player.timer)clearInterval(player.timer);
     if(player.raf)cancelAnimationFrame(player.raf);
-    if(player.playing){player.start=0;player.raf=requestAnimationFrame(filmLoop);}
+    if(player.playing){
+      player.timer=setInterval(function(){
+        if(player.step>=player.steps.length-1){togglePlay();return;}
+        showStep(player.step+1);
+      },player.dur);
+    }
   }
 
   /* ---------- modal shell ---------- */
@@ -523,11 +545,11 @@
 
       // action chips
       var acts=document.createElement('div'); acts.className='v2-actions';
-      acts.innerHTML='<button type="button" class="v2-chip" data-act="3d" aria-label="3D модель блюда">🧊 3D модель</button>'+
-        '<button type="button" class="v2-chip v2-chip--vid" data-act="video" aria-label="Видео-инструкция приготовления">🎬 Как готовить</button>';
+      acts.innerHTML='<button type="button" class="v2-chip" data-act="photo" aria-label="Реалистичное фото блюда">🖼 Фото блюда</button>'+
+        '<button type="button" class="v2-chip v2-chip--vid" data-act="video" aria-label="Видео-инструкция приготовления">🎬 Видеогайд</button>';
       card.appendChild(acts);
-      acts.querySelector('[data-act="3d"]').addEventListener('click',function(){
-        ensureModal(); open3D(name,recipe);
+      acts.querySelector('[data-act="photo"]').addEventListener('click',function(){
+        ensureModal(); openPhoto(name,recipe);
       });
       acts.querySelector('[data-act="video"]').addEventListener('click',function(){
         ensureModal(); openVideo(name,recipe);
