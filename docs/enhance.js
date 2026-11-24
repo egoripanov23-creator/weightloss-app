@@ -286,7 +286,7 @@
       if(meals && meals.length){
         var m=meals[0];
         var yt=m.strYoutube||'';
-        var embed=yt?yt.replace('watch?v=','embed/').replace('youtu.be/','youtube.com/embed/'):'';
+        var embed=yt?yt.replace('www.youtube.com/watch?v=','www.youtube-nocookie.com/embed/').replace('youtu.be/','www.youtube-nocookie.com/embed/'):'';
         return {title:m.strMeal, image:m.strMealThumb, video:embed};
       }
     }catch(e){}
@@ -527,7 +527,7 @@
       var wrap=document.getElementById('v2-video-frame-wrap');
       var play=document.getElementById('v2-video-play');
       if(play){play.addEventListener('click',function(){
-        wrap.innerHTML='<iframe class="v2-video-frame" src="'+meal.video+'?autoplay=1&rel=0&modestbranding=1" title="Видео приготовления" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>';
+        wrap.innerHTML='<iframe class="v2-video-frame" src="'+meal.video+'?autoplay=1&rel=0&modestbranding=1&playsinline=1" title="Видео приготовления" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>';
       });}
     } else {
       body.innerHTML=
