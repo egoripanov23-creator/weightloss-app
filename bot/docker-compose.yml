@@ -7,5 +7,7 @@ services:
       - .env                     # BOT_TOKEN, AI_API_KEY
     volumes:
       - ./data:/app/data         # persistent database & tickets
+    ports:
+      - "8000:8000"
     environment:
       - DATA_DIR=/app/data

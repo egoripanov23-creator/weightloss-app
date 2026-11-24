@@ -13,6 +13,7 @@ from urllib.parse import urlencode
 from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 import db
+from aiohttp import web
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 
@@ -44,6 +45,9 @@ SOURCES_FILE = os.path.join(DATA_DIR, "sources.json")
 
 # Admin IDs (manager) — ticket notifications are sent here.
 ADMIN_IDS = {5781304476}  # ваш Telegram ID (менеджер тикетов)
+
+# Temporary in-memory storage for pending registrations (token -> data)
+PENDING_REGISTRATIONS = {}
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("weightloss-bot")
@@ -211,19 +215,8 @@ async def cmd_start(message, state: FSMContext):
     if args and not args.startswith(("reg_", "ticket_", "review_")):
         log_source(message.from_user.id, args)
     if args.startswith("reg_"):
-        raw = args[4:] + "=" * (-len(args[4:]) % 4)
-        payload = {}
-        try:
-            payload = json.loads(base64.urlsafe_b64decode(raw).decode("utf-8"))
-        except Exception:
-            pass
-        token = payload.get("t", args[4:])
-        await state.update_data(reg_token=token, reg_login=payload.get("login", ""),
-                                reg_password=payload.get("password", ""),
-                                reg_email=payload.get("email", ""), reg_name=payload.get("name", ""))
-        if not payload.get("login") or not payload.get("password"):
-            await message.answer("⚠️ Данные регистрации не передались. Вернитесь на сайт и попробуйте снова.")
-            return
+        token = args[4:].strip()
+        await state.update_data(reg_token=token)
         await state.set_state(RegStates.waiting_contact)
         kb = ReplyKeyboardMarkup(
             keyboard=[[KeyboardButton(text="📱 Подтвердить номер", request_contact=True)]],
@@ -232,7 +225,7 @@ async def cmd_start(message, state: FSMContext):
         )
         await message.answer(
             "👋 Добро пожаловать в <b>AI WeightLoss</b>!\n\n"
-            "Чтобы продолжить регистрацию на сайте, подтвердите ваш номер телефона — "
+            "Чтобы завершить регистрацию на сайте, подтвердите ваш номер телефона — "
             "нажмите кнопку ниже 👇",
             reply_markup=kb,
         )
@@ -680,13 +673,18 @@ async def reg_contact(message, state: FSMContext):
         await message.answer("Пожалуйста, поделитесь своим номером телефона.")
         return
     data = await state.get_data()
-    token = data.get("reg_token", "")
-    login = data.get("reg_login", "")
-    password = data.get("reg_password", "")
-    email = data.get("reg_email", "")
-    name = f"{contact.first_name} {contact.last_name or ''}".strip() or data.get("reg_name", "")
+    token = (data.get("reg_token") or "").strip()
     await state.clear()
 
+    pending = PENDING_REGISTRATIONS.pop(token, None)
+    if not pending or (time.time() - pending.get("created", 0) > 600):
+        await message.answer("⚠️ Данные регистрации устарели или не найдены. Вернитесь на сайт и начните регистрацию заново.")
+        return
+
+    login = pending.get("login", "")
+    password = pending.get("password", "")
+    email = pending.get("email", "")
+    name = f"{contact.first_name} {contact.last_name or ''}".strip() or pending.get("name", "")
     phone = contact.phone_number
 
     # Save to database
@@ -764,7 +762,67 @@ async def fallback(message):
     )
 
 
+async def handle_health(request):
+    return web.json_response({"status": "ok"}, headers={"Access-Control-Allow-Origin": "*"})
+
+async def handle_pending_registration(request):
+    try:
+        data = await request.json()
+    except Exception:
+        return web.json_response({"error": "bad json"}, status=400, headers={"Access-Control-Allow-Origin": "*"})
+    token = (data.get("token") or "").strip()
+    login = (data.get("login") or "").strip()
+    password = data.get("password") or ""
+    email = (data.get("email") or "").strip()
+    name = (data.get("name") or "").strip()
+    if not token or len(token) > 64 or not login or not password:
+        return web.json_response({"error": "token, login and password are required"}, status=400, headers={"Access-Control-Allow-Origin": "*"})
+    PENDING_REGISTRATIONS[token] = {"login": login, "password": password, "email": email, "name": name, "created": time.time()}
+    # cleanup old
+    now = time.time()
+    for k in [k for k, v in PENDING_REGISTRATIONS.items() if now - v.get("created", 0) > 600]:
+        PENDING_REGISTRATIONS.pop(k, None)
+    return web.json_response({"ok": True}, headers={"Access-Control-Allow-Origin": "*"})
+
+async def handle_login(request):
+    try:
+        data = await request.json()
+    except Exception:
+        return web.json_response({"error": "bad json"}, status=400, headers={"Access-Control-Allow-Origin": "*"})
+    login = (data.get("login") or "").strip()
+    password = data.get("password") or ""
+    user = db.verify_user(login, password)
+    if not user:
+        return web.json_response({"error": "invalid credentials"}, status=401, headers={"Access-Control-Allow-Origin": "*"})
+    session = sign_session(user["login"], user.get("name", "") or user["login"], user.get("phone", ""))
+    return web.json_response({
+        "session": session,
+        "user": {"login": user["login"], "name": user.get("name") or user["login"], "phone": user.get("phone", ""), "email": user.get("email", "")},
+    }, headers={"Access-Control-Allow-Origin": "*"})
+
+async def start_api():
+    app = web.Application()
+    app.router.add_get("/api/health", handle_health)
+    app.router.add_post("/api/auth/register/pending", handle_pending_registration)
+    app.router.add_post("/api/auth/login", handle_login)
+    app.router.add_options("/api/auth/register/pending", lambda r: web.Response(headers={
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type",
+    }))
+    app.router.add_options("/api/auth/login", lambda r: web.Response(headers={
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type",
+    }))
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", 8000)
+    await site.start()
+    logger.info("API running on port 8000")
+
 async def main():
+    await start_api()
     await bot.set_chat_menu_button(
         menu_button=MenuButtonWebApp(text="Открыть", web_app=WebAppInfo(url=MINI_APP_URL)),
     )
