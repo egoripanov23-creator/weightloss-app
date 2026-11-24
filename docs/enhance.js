@@ -224,7 +224,25 @@
       var key=new THREE.DirectionalLight(0xffffff,2.1); key.position.set(5,10,7); key.castShadow=true; key.shadow.mapSize.width=1024; key.shadow.mapSize.height=1024; scene.add(key);
       var fill=new THREE.DirectionalLight(0x5eead4,.95); fill.position.set(-6,4,-5); scene.add(fill);
       var rim=new THREE.DirectionalLight(0xff9ec7,.7); rim.position.set(0,6,-8); scene.add(rim);
-      var group=buildDish(name); group.scale.set(1.12,1.12,1.12); scene.add(group);
+      // realistic photo wrapped on a 3D bowl (rotatable)
+      var plate=new THREE.Mesh(new THREE.CylinderGeometry(2.78,2.42,0.22,64),new THREE.MeshStandardMaterial({color:0xf7fafc,roughness:0.18,metalness:0.08}));
+      plate.position.y=-0.2; plate.receiveShadow=true; scene.add(plate);
+      var rim=new THREE.Mesh(new THREE.TorusGeometry(2.62,0.13,18,72),new THREE.MeshStandardMaterial({color:0xe8f1f8,roughness:0.22,metalness:0.12}));
+      rim.rotation.x=Math.PI/2; rim.position.y=-0.09; rim.castShadow=true; scene.add(rim);
+      var shadow=new THREE.Mesh(new THREE.CircleGeometry(3.25,64),new THREE.MeshBasicMaterial({color:0x000000,transparent:true,opacity:0.28}));
+      shadow.rotation.x=-Math.PI/2; shadow.position.y=-0.36; scene.add(shadow);
+      var group=new THREE.Group(); scene.add(group);
+      var texLoader=new THREE.TextureLoader();
+      texLoader.crossOrigin='anonymous';
+      texLoader.load(dishImageUrl(name,recipe),function(tex){
+        if(THREE.sRGBEncoding) tex.encoding=THREE.sRGBEncoding;
+        var bowl=new THREE.Mesh(new THREE.SphereGeometry(1.95,64,32,0,Math.PI*2,0,Math.PI/2),new THREE.MeshStandardMaterial({map:tex,roughness:0.32,metalness:0.03}));
+        bowl.scale.set(1,0.72,1); bowl.position.y=0.08; bowl.castShadow=true; bowl.receiveShadow=true; group.add(bowl);
+        var glaze=new THREE.Mesh(new THREE.SphereGeometry(1.5,32,20),new THREE.MeshStandardMaterial({color:0xffffff,transparent:true,opacity:0.12,roughness:0.1}));
+        glaze.scale.set(1,0.45,1); glaze.position.y=0.28; group.add(glaze);
+      },undefined,function(){
+        var fallback=buildDish(name); group.add(fallback);
+      });
       viewer={renderer:renderer,scene:scene,camera:cam,group:group,sceneLights:[key,fill,rim],raf:null,drag:false,px:0,zoom:0};
       var rot=0.35;
       function loop(){
@@ -234,6 +252,7 @@
         group.position.y=Math.sin(rot*1.7)*0.045;
         renderer.render(scene,cam);
       }
+      loop();
       loop();
       canvas.addEventListener('pointerdown',function(e){viewer.drag=true;viewer.px=e.clientX;canvas.setPointerCapture(e.pointerId);e.preventDefault();});
       canvas.addEventListener('pointermove',function(e){if(!viewer.drag)return;rot+=(e.clientX-viewer.px)*0.012;viewer.px=e.clientX;e.preventDefault();});
