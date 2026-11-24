@@ -173,7 +173,10 @@ body.v2 input:focus,body.v2 textarea:focus,body.v2 select:focus{border-color:var
 .v2-progress__bar{height:5px;border-radius:5px;background:rgba(255,255,255,.1);overflow:hidden;cursor:pointer}
 .v2-progress__fill{height:100%;width:0%;background:linear-gradient(90deg,var(--v2-accent),var(--v2-accent2));transition:width .25s linear}
 .v2-progress__meta{display:flex;justify-content:space-between;margin-top:6px;font-size:.65rem;color:var(--v2-muted)}
-.v2-step-text{padding:0 20px 18px;font-size:.85rem;line-height:1.55;min-height:44px;color:var(--v2-text)}
+.v2-step-text{padding:0 20px 18px;font-size:1rem;line-height:1.6;min-height:52px;color:var(--v2-text);font-weight:600}
+.v2-ingredients-title{padding:0 20px 8px;font-size:.78rem;font-weight:700;color:var(--v2-muted);text-transform:uppercase;letter-spacing:.06em}
+.v2-ingredient{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:999px;background:rgba(58,155,143,.14);border:1px solid rgba(58,155,143,.28);color:var(--v2-text);font-size:.82rem;line-height:1.2}
+.v2-ingredient__icon{font-size:1.05rem}
 .v2-ingredients{display:flex;flex-wrap:wrap;gap:6px;padding:0 20px 14px}
 .v2-ingredient{padding:5px 10px;border-radius:999px;background:rgba(58,155,143,.12);border:1px solid rgba(58,155,143,.24);color:var(--v2-text);font-size:.72rem;line-height:1.2}
 

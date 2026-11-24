@@ -176,9 +176,9 @@
       document.getElementById('v2-modal-sub').textContent='3D-модель блюда — покрутите, чтобы рассмотреть со всех сторон';
       var body=document.getElementById('v2-modal-body');
       var ingredients=parseIngredients(recipe);
-      var ingHtml=ingredients.length?'<div class="v2-ingredients">'+ingredients.map(function(i){return '<span class="v2-ingredient">'+esc(i)+'</span>';}).join('')+'</div>':'';
+      var ingHtml=ingredients.length?'<div class="v2-ingredients-title">Состав блюда</div><div class="v2-ingredients">'+ingredients.map(ingredientChip).join('')+'</div>':'';
       body.innerHTML='<div class="v2-canvas-wrap"><canvas id="dish-canvas"></canvas><div class="v2-hint">🖐 Потяните, чтобы вращать · колёсико — приблизить</div></div>'+
-        '<div class="v2-modal__info"><h3>'+esc(name)+'</h3><p>Реалистичная 3D-визуализация порции. Вращайте модель пальцем или мышью.</p>'+ingHtml+'</div>';
+        '<div class="v2-modal__info"><h3>'+esc(name)+'</h3><p>3D-визуализация порции. Ниже — все ингредиенты, чтобы было понятно, что входит в блюдо.</p>'+ingHtml+'</div>';
       var canvas=document.getElementById('dish-canvas');
       var H=Math.max(160,Math.round(wrap.getBoundingClientRect().height));
       var renderer=new THREE.WebGLRenderer({canvas:canvas,antialias:true,alpha:true});
@@ -225,11 +225,40 @@
   /* ---------- Cooking "video" — procedural animated canvas film ---------- */
   var player={timer:null,raf:null,step:0,steps:[],playing:false,dur:4200,start:0,t:0,ctx:null,cols:[C.green,C.lime],fps60:true,progressSmooth:true};
 
+  function ingredientIcon(text){
+    var t=(text||'').toLowerCase();
+    if(/куриц|грудк|индей|мяс|котлет|стейк|говяд|свин/.test(t)) return '🍗';
+    if(/рыб|лосос|кревет|тунец/.test(t)) return '🐟';
+    if(/яйц/.test(t)) return '🥚';
+    if(/молок/.test(t)) return '🥛';
+    if(/творог|йогурт|сыр/.test(t)) return '🧀';
+    if(/гречк|овсян|каш|рис/.test(t)) return '🌾';
+    if(/макар|паст|лапш/.test(t)) return '🍝';
+    if(/помидор|томат/.test(t)) return '🍅';
+    if(/огур/.test(t)) return '🥒';
+    if(/перец/.test(t)) return '🌶️';
+    if(/морков/.test(t)) return '🥕';
+    if(/лук/.test(t)) return '🧅';
+    if(/капуст/.test(t)) return '🥬';
+    if(/картоф/.test(t)) return '🥔';
+    if(/гриб/.test(t)) return '🍄';
+    if(/яблок/.test(t)) return '🍎';
+    if(/банан/.test(t)) return '🍌';
+    if(/ягод|черник|клубник|малин/.test(t)) return '🫐';
+    if(/орех|миндал|грец/.test(t)) return '🥜';
+    if(/мед/.test(t)) return '🍯';
+    if(/масл/.test(t)) return '🧈';
+    if(/хлеб|тост/.test(t)) return '🍞';
+    if(/зелень|укроп|петруш|базилик/.test(t)) return '🌿';
+    if(/соль|специ|перец/.test(t)) return '🧂';
+    return '🥘';
+  }
   function parseIngredients(recipe){
     var m=String(recipe||'').match(/ингредиенты\s*:\s*(.+)/i);
     if(!m) return [];
     return m[1].split(',').map(function(s){return s.trim();}).filter(Boolean);
   }
+  function ingredientChip(text){ return '<span class="v2-ingredient"><span class="v2-ingredient__icon">'+ingredientIcon(text)+'</span>'+esc(text)+'</span>'; }
   function parseSteps(recipe){
     var raw=String(recipe||'').split(/\n+/).map(function(s){return s.trim();}).filter(Boolean);
     var steps=[];
@@ -401,7 +430,7 @@
     player.steps=parseSteps(recipe);player.step=0;player.playing=false;player.cols=dishColor(name);
     player.ingredients=parseIngredients(recipe);
     var body=document.getElementById('v2-modal-body');
-    var ingHtml=player.ingredients.length?'<div class="v2-ingredients">'+player.ingredients.map(function(i){return '<span class="v2-ingredient">'+esc(i)+'</span>';}).join('')+'</div>':'';
+    var ingHtml=player.ingredients.length?'<div class="v2-ingredients-title">Что понадобится</div><div class="v2-ingredients">'+player.ingredients.map(ingredientChip).join('')+'</div>':'';
     body.innerHTML=
       '<div class="v2-player" style="padding:0"><canvas id="film-canvas" width="520" height="360" style="width:100%;height:360px;display:block;border-radius:22px 22px 0 0"></canvas></div>'+
       ingHtml+
