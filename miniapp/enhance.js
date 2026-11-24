@@ -514,14 +514,21 @@
     var meal=await fetchMealDb(dishSearchTerm(name));
     var body=document.getElementById('v2-modal-body');
     var ingHtml=player.ingredients.length?'<div class="v2-ingredients-title">Что понадобится</div><div class="v2-ingredients">'+player.ingredients.map(ingredientChip).join('')+'</div>':'';
+    var videoId=meal.video?meal.video.split('/embed/')[1]||'':'';
+    var thumb=videoId?'https://img.youtube.com/vi/'+videoId+'/hqdefault.jpg':(meal.image||dishImageUrl(name,recipe));
     if(meal.video){
       body.innerHTML=
-        '<div class="v2-video-frame-wrap"><iframe class="v2-video-frame" src="'+meal.video+'" title="Видео приготовления" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div>'+
+        '<div class="v2-video-frame-wrap" id="v2-video-frame-wrap"><img class="v2-video-thumb" src="'+thumb+'" alt="'+esc(name)+'"><button type="button" class="v2-video-play" id="v2-video-play" aria-label="Воспроизвести видео">▶</button><div class="v2-video-badge">Видео-гайд</div></div>'+
         ingHtml+
         '<div class="v2-step-card" id="v2-step-card"><span class="v2-step-card__icon" id="v2-step-icon">🍳</span><span class="v2-step-card__text" id="v2-step-text"></span></div>'+
         '<div class="v2-controls"><button class="v2-play" id="v2-play">▶</button>'+
         '<div class="v2-progress"><div class="v2-progress__bar" id="v2-bar"><div class="v2-progress__fill" id="v2-fill"></div></div>'+
         '<div class="v2-progress__meta"><span id="v2-step-now">Шаг 1</span><span id="v2-step-count">из '+player.steps.length+'</span></div></div></div>';
+      var wrap=document.getElementById('v2-video-frame-wrap');
+      var play=document.getElementById('v2-video-play');
+      if(play){play.addEventListener('click',function(){
+        wrap.innerHTML='<iframe class="v2-video-frame" src="'+meal.video+'?autoplay=1&rel=0&modestbranding=1" title="Видео приготовления" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>';
+      });}
     } else {
       body.innerHTML=
         '<div class="v2-player" style="padding:0"><canvas id="film-canvas" width="520" height="360" style="width:100%;height:360px;display:block;border-radius:22px 22px 0 0"></canvas></div>'+
