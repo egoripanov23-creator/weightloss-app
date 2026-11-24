@@ -78,6 +78,7 @@ const state = {
 // ---------- Navigation links ----------
 const TELEGRAM_URL = "https://t.me/foodAi1_bot";
 const SITE_URL = "https://aifoodbot.duckdns.org/";
+const API_BASE = "https://aifoodbot-api.91-102-165-64.sslip.io";
 
 // ---------- Telegram Cloud Storage helpers ----------
 // Check if running inside actual Telegram (not browser)
@@ -644,18 +645,30 @@ function renderLogin() {
       <button class="btn btn-ghost btn-block" id="btn-to-register" style="margin-top:10px;">Нет аккаунта? Зарегистрироваться</button>
     </div>
   `;
-  document.getElementById("btn-login").addEventListener("click", () => {
+  document.getElementById("btn-login").addEventListener("click", async () => {
     const login = document.getElementById("login-login").value.trim();
     const password = document.getElementById("login-password").value;
     if (!login || !password) {
       if (tg) tg.showAlert("Введите логин и пароль"); else alert("Введите логин и пароль");
       return;
     }
-    const payload = btoa(unescape(encodeURIComponent(JSON.stringify({ login, password }))))
-      .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-    const link = `https://t.me/foodAi1_bot?start=login_${payload}`;
-    if (tg) { try { tg.openLink(link); } catch (e) { window.open(link, "_blank"); } }
-    else window.open(link, "_blank");
+    try {
+      const res = await fetch(API_BASE + "/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ login, password }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.session) throw new Error(data.error || "login failed");
+      state.user = { name: data.user?.name || login, login: data.user?.login || login, phone: data.user?.phone || "", email: data.user?.email || "", session: data.session, verifiedViaTelegram: true, createdAt: new Date().toISOString() };
+      await storageSet("user", state.user);
+      await storageSet("agreed", true);
+      if (!state.settings) { renderSettings(); showScreen("settings"); }
+      else { renderMealPlan(); showScreen("mealplan"); }
+    } catch (e) {
+      const msg = "Неверный логин или пароль";
+      if (tg) tg.showAlert(msg); else alert(msg);
+    }
   });
   document.getElementById("btn-to-register").addEventListener("click", () => {
     renderAgreement(); showScreen("agreement");
@@ -700,7 +713,7 @@ function renderRegistration() {
   // Verify phone via Telegram bot (website) or directly (inside Mini App)
   const verifyBtn = document.getElementById("btn-verify-telegram");
   if (verifyBtn) {
-    verifyBtn.addEventListener("click", () => {
+    verifyBtn.addEventListener("click", async () => {
       // Always route through the bot — reliable on both website and Mini App.
       // tg.requestContact is unreliable across Telegram versions.
       const name = document.getElementById("reg-name").value.trim();
@@ -712,14 +725,24 @@ function renderRegistration() {
         if (tg) tg.showAlert(msg); else alert(msg);
         return;
       }
-      const token = "r" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+      const token = "r" + crypto.randomUUID().replace(/-/g, "").slice(0, 24);
       localStorage.setItem("reg_token", token);
       localStorage.setItem("reg_login", login);
       localStorage.setItem("reg_password", password);
       if (name) localStorage.setItem("reg_name", name);
-      const payload = btoa(unescape(encodeURIComponent(JSON.stringify({ t: token, login, password, email, name }))))
-        .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-      const botLink = `https://t.me/foodAi1_bot?start=reg_${payload}`;
+      try {
+        const res = await fetch(API_BASE + "/api/auth/register/pending", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token, login, password, email, name }),
+        });
+        if (!res.ok) throw new Error("pending failed");
+      } catch (e) {
+        const msg = "Не удалось начать регистрацию. Проверьте интернет и попробуйте снова.";
+        if (tg) tg.showAlert(msg); else alert(msg);
+        return;
+      }
+      const botLink = `https://t.me/foodAi1_bot?start=reg_${token}`;
       if (tg) { try { tg.openLink(botLink); } catch (e) { window.open(botLink, "_blank"); } }
       else window.open(botLink, "_blank");
     });
