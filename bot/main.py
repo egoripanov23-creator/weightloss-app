@@ -75,6 +75,8 @@ def sign_session(login, name="", phone=""):
             base64.urlsafe_b64encode(signature).rstrip(b"=").decode("ascii"))
 
 def verify_session_token(token):
+    if SESSION_PRIVATE_KEY is None:
+        return None
     if not token or not isinstance(token, str) or "." not in token:
         return None
     try:
@@ -359,15 +361,23 @@ async def cmd_reply(message):
     ticket["status"] = "answered"
     ticket["answer"] = answer
     ticket["answered_at"] = datetime.now().isoformat()
+    if not ticket.get("user_id"):
+        db_user = db.get_user(ticket.get("login", ""))
+        if db_user and db_user.get("telegram_id"):
+            ticket["user_id"] = db_user["telegram_id"]
     save_tickets(tickets)
-    try:
-        await bot.send_message(
-            ticket["user_id"],
-            f"📩 <b>Ответ по тикету №{tid}</b>\n\n{answer}\n\n"
-            "Если проблема осталась — создайте новый тикет.",
-        )
-    except Exception as e:
-        logger.error(f"Failed to notify user: {e}")
+    user_id = ticket.get("user_id") or 0
+    if user_id:
+        try:
+            await bot.send_message(
+                user_id,
+                f"📩 <b>Ответ по тикету №{tid}</b>\n\n{answer}\n\n"
+                "Если проблема осталась — создайте новый тикет.",
+            )
+        except Exception as e:
+            logger.error(f"Failed to notify user: {e}")
+    else:
+        logger.info(f"Ticket {tid} has no Telegram user to notify; answer available in app")
     await message.answer(f"✅ Ответ отправлен по тикету №{tid}.")
 
 
@@ -393,11 +403,17 @@ async def cmd_close(message):
         return
     ticket["status"] = "closed"
     ticket["closed_at"] = datetime.now().isoformat()
+    if not ticket.get("user_id"):
+        db_user = db.get_user(ticket.get("login", ""))
+        if db_user and db_user.get("telegram_id"):
+            ticket["user_id"] = db_user["telegram_id"]
     save_tickets(tickets)
-    try:
-        await bot.send_message(ticket["user_id"], f"⚪ Тикет №{tid} закрыт менеджером. Спасибо за обращение!")
-    except Exception as e:
-        logger.error(f"Failed to notify user: {e}")
+    user_id = ticket.get("user_id") or 0
+    if user_id:
+        try:
+            await bot.send_message(user_id, f"⚪ Тикет №{tid} закрыт менеджером. Спасибо за обращение!")
+        except Exception as e:
+            logger.error(f"Failed to notify user: {e}")
     await message.answer(f"✅ Тикет №{tid} закрыт.")
 
 
@@ -607,9 +623,11 @@ async def show_my_tickets(message):
 async def create_ticket_record(login, name, text, category="other", subject=""):
     tickets = load_tickets()
     tid = next_ticket_id(tickets)
+    db_user = db.get_user(login)
+    telegram_id = (db_user or {}).get("telegram_id")
     ticket = {
         "id": tid,
-        "user_id": 0,
+        "user_id": telegram_id or 0,
         "login": login,
         "name": name or login,
         "username": login,
