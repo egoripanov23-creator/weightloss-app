@@ -43,7 +43,8 @@
     var isMeat=/куриц|говяд|свин|индей|мяс|котлет|стейк/.test(n);
     var isPorridge=/каш|гречк|овсян|рис/.test(n);
     var isPasta=/паст|макар|лапш/.test(n);
-    var isDessert=/творог|йогурт|ягод|десерт|блин/.test(n);
+    var isPancake=/блин|панкейк|олад|сырник/.test(n);
+    var isDessert=/творог|йогурт|ягод|десерт/.test(n);
 
     var plateMat=new THREE.MeshStandardMaterial({color:0xf7fafc,roughness:0.18,metalness:0.08});
     var rimMat=new THREE.MeshStandardMaterial({color:0xe8f1f8,roughness:0.22,metalness:0.12});
@@ -137,8 +138,20 @@
       for(var j=0;j<6;j++) ball((j-2.5)*0.38,0.72,(j%2-0.5)*0.45,0.08,new THREE.MeshStandardMaterial({color:C.purple,roughness:0.4}));
       var drizzle=new THREE.Mesh(new THREE.TorusGeometry(0.95,0.045,10,48),new THREE.MeshStandardMaterial({color:0xfff0c8,roughness:0.2}));
       drizzle.rotation.x=Math.PI/2; drizzle.position.y=0.7; g.add(drizzle);
+    } else if(isPancake){
+      for(var i=0;i<3;i++){
+        var p=new THREE.Mesh(new THREE.CylinderGeometry(1.55,1.45,0.16,40),new THREE.MeshStandardMaterial({color:0xf2d6a2,roughness:0.38,metalness:0.02}));
+        p.position.y=0.05+i*0.24; p.castShadow=true; p.receiveShadow=true; g.add(p);
+        var edge=new THREE.Mesh(new THREE.TorusGeometry(1.5,0.05,10,40),new THREE.MeshStandardMaterial({color:0xe6c28a,roughness:0.4}));
+        edge.rotation.x=Math.PI/2; edge.position.y=0.05+i*0.24; g.add(edge);
+      }
+      var butter=new THREE.Mesh(new THREE.BoxGeometry(0.45,0.18,0.45),new THREE.MeshStandardMaterial({color:0xfff2a6,roughness:0.2}));
+      butter.position.set(0.15,0.82,0.1); butter.rotation.y=0.4; butter.castShadow=true; g.add(butter);
+      var syrup=new THREE.Mesh(new THREE.TorusGeometry(0.85,0.08,10,40),new THREE.MeshStandardMaterial({color:0x8b5a2b,roughness:0.25,transparent:true,opacity:0.85}));
+      syrup.rotation.x=Math.PI/2; syrup.position.y=0.9; g.add(syrup);
+      for(var i=0;i<6;i++){var a=i/6*Math.PI*2; ball(Math.cos(a)*1.05,0.95,Math.sin(a)*1.05,0.12,new THREE.MeshStandardMaterial({color:C.red,roughness:0.45}));}
+      for(var s=0;s<4;s++) ball((s-1.5)*0.4,1.05+s*0.06,(s%2-0.5)*0.25,0.07,new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:0.3}));
     } else if(isDessert){
-      var base=new THREE.Mesh(new THREE.CylinderGeometry(1.35,1.18,0.72,32),new THREE.MeshStandardMaterial({color:cols[0],roughness:0.35}));
       base.position.y=0.2; base.castShadow=true; g.add(base);
       var top=new THREE.Mesh(new THREE.SphereGeometry(1.22,32,18),new THREE.MeshStandardMaterial({color:cols[1],roughness:0.22}));
       top.scale.set(1,0.58,1); top.position.y=0.64; g.add(top);
@@ -656,7 +669,7 @@
         '<button type="button" class="v2-chip v2-chip--vid" data-act="video" aria-label="Видео-инструкция приготовления">🎬 Видеогайд</button>';
       card.appendChild(acts);
       acts.querySelector('[data-act="photo"]').addEventListener('click',function(){
-        ensureModal(); openPhoto(name,recipe);
+        ensureModal(); open3D(name,recipe);
       });
       acts.querySelector('[data-act="video"]').addEventListener('click',function(){
         ensureModal(); openVideo(name,recipe);
