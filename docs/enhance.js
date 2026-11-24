@@ -141,8 +141,10 @@
       for(var i=0;i<40;i++){ octx.fillStyle='rgba(255,255,255,0.18)'; octx.beginPath(); octx.arc(Math.random()*256,Math.random()*256,2+Math.random()*4,0,Math.PI*2); octx.fill(); }
       var oatTex=new THREE.CanvasTexture(oatCanvas);
       if(THREE.sRGBEncoding) oatTex.encoding=THREE.sRGBEncoding;
-      var surface=new THREE.Mesh(new THREE.CircleGeometry(1.72,64),new THREE.MeshStandardMaterial({map:oatTex,roughness:0.45,metalness:0.02}));
-      surface.rotation.x=-Math.PI/2; surface.position.y=0.34; surface.receiveShadow=true; g.add(surface);
+      var surface=new THREE.Mesh(new THREE.SphereGeometry(1.72,64,32,0,Math.PI*2,0,Math.PI/2),new THREE.MeshPhysicalMaterial({map:oatTex,roughness:0.35,metalness:0.02,clearcoat:0.25,clearcoatRoughness:0.4}));
+      surface.scale.set(1,0.38,1); surface.position.y=0.3; surface.castShadow=true; surface.receiveShadow=true; g.add(surface);
+      var dome=new THREE.Mesh(new THREE.SphereGeometry(1.15,32,20),new THREE.MeshPhysicalMaterial({color:0xf3e3c3,roughness:0.3,metalness:0.02,clearcoat:0.3}));
+      dome.scale.set(1,0.55,1); dome.position.y=0.48; dome.castShadow=true; g.add(dome);
       for(var i=0;i<14;i++){var a=i/14*Math.PI*2; ball(Math.cos(a)*0.88,0.42,Math.sin(a)*0.88,0.13,foodMat2);}
       for(var j=0;j<7;j++) ball((j-3)*0.38,0.52,(j%2-0.5)*0.45,0.09,new THREE.MeshStandardMaterial({color:C.purple,roughness:0.4}));
       var honey=new THREE.Mesh(new THREE.TorusGeometry(0.9,0.06,10,48),new THREE.MeshStandardMaterial({color:0xffe0a8,roughness:0.2}));
@@ -203,11 +205,11 @@
       body.innerHTML='<div class="v2-canvas-wrap"><canvas id="dish-canvas"></canvas><div class="v2-hint">🖐 Потяните, чтобы вращать · колёсико — приблизить</div></div>'+
         '<div class="v2-modal__info"><h3>'+esc(name)+'</h3><p>3D-визуализация порции. Ниже — все ингредиенты, чтобы было понятно, что входит в блюдо.</p>'+ingHtml+'</div>';
       var canvas=document.getElementById('dish-canvas');
-      var H=Math.max(160,Math.round(wrap.getBoundingClientRect().height));
+      var H=Math.max(220,Math.round(wrap.getBoundingClientRect().height));
       var renderer=new THREE.WebGLRenderer({canvas:canvas,antialias:true,alpha:true});
       renderer.setClearColor('#070b14',1);
       renderer.setPixelRatio(Math.min(devicePixelRatio,2));
-      renderer.setSize(H*1.7,H,false);
+      renderer.setSize(H*1.6,H,false);
       renderer.shadowMap.enabled=true;
       renderer.shadowMap.type=THREE.PCFSoftShadowMap;
       renderer.toneMapping=THREE.ACESFilmicToneMapping;
@@ -216,7 +218,7 @@
       scene.background=new THREE.Color(0x08111a);
       scene.fog=new THREE.Fog(0x08111a,10,24);
       var cam=new THREE.PerspectiveCamera(34,1.7,0.1,100);
-      cam.position.set(0,4.9,7.8); cam.lookAt(0,0.15,0);
+      cam.position.set(0,4.2,6.8); cam.lookAt(0,0.25,0);
       scene.add(new THREE.AmbientLight(0xffffff,.55));
       var hemi=new THREE.HemisphereLight(0x8fd3ff,0x101820,.75); scene.add(hemi);
       var key=new THREE.DirectionalLight(0xffffff,2.1); key.position.set(5,10,7); key.castShadow=true; key.shadow.mapSize.width=1024; key.shadow.mapSize.height=1024; scene.add(key);
