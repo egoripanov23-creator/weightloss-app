@@ -1608,7 +1608,7 @@ async function generateAISupport(currentWeight, previousWeight) {
 
 // ---------- Initialization ----------
 async function init() {
-  initThree();
+  // initThree(); // background disabled for a calmer, faster UI
 
   // Load saved data
   const agreed = await storageGet("agreed");
@@ -1634,6 +1634,7 @@ async function init() {
     const regName = urlParams.get("name");
     const regLogin = urlParams.get("login");
     const regSession = urlParams.get("session");
+    const session = urlParams.get("session");
     if (regToken && regPhone) {
       state.user = {
         name: regName || state.user?.name || "",
@@ -2004,7 +2005,7 @@ function initSplash() {
 // ---------- Start ----------
 document.addEventListener("DOMContentLoaded", () => {
   try {
-    initSplash();
+    // initSplash(); // calmer first load
     initSupport();
     initReviews();
     initReferral();
@@ -2024,7 +2025,7 @@ document.addEventListener("DOMContentLoaded", () => {
       // meal plan for returning ones) — just reveal it
     };
     if (skip) skip.addEventListener("click", dismissSplash);
-    setTimeout(dismissSplash, 5000); // auto-continue after 5 seconds
+    setTimeout(dismissSplash, 2500); // auto-continue after 2.5 seconds
 
     // init() runs in background behind the splash so data is ready
     init().catch(err => console.error("Init error:", err));
