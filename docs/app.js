@@ -499,8 +499,8 @@ function initThree() {
   const count = 80;
   const positions = new Float32Array(count * 3);
   const colors = new Float32Array(count * 3);
-  const accent = new THREE.Color(0x9be15d);
-  const accent2 = new THREE.Color(0x4ade80);
+  const accent = new THREE.Color(0x2dd4bf);
+  const accent2 = new THREE.Color(0x38bdf8);
 
   for (let i = 0; i < count; i++) {
     positions[i * 3] = (Math.random() - 0.5) * 20;
@@ -531,7 +531,7 @@ function initThree() {
   for (let i = 0; i < 5; i++) {
     const geo = new THREE.SphereGeometry(0.3 + Math.random() * 0.4, 16, 16);
     const mat = new THREE.MeshBasicMaterial({
-      color: i % 2 === 0 ? 0x9be15d : 0x4ade80,
+      color: i % 2 === 0 ? 0x2dd4bf : 0x38bdf8,
       transparent: true,
       opacity: 0.15,
       wireframe: true,
