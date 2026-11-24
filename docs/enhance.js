@@ -167,7 +167,7 @@
     return g;
   }
 
-  function open3D(name){
+  function open3D(name,recipe){
     try{
       closeViewer();
       var wrap=document.getElementById('v2-modal');
@@ -175,8 +175,10 @@
       document.getElementById('v2-modal-title').textContent='🥘 '+name;
       document.getElementById('v2-modal-sub').textContent='3D-модель блюда — покрутите, чтобы рассмотреть со всех сторон';
       var body=document.getElementById('v2-modal-body');
+      var ingredients=parseIngredients(recipe);
+      var ingHtml=ingredients.length?'<div class="v2-ingredients">'+ingredients.map(function(i){return '<span class="v2-ingredient">'+esc(i)+'</span>';}).join('')+'</div>':'';
       body.innerHTML='<div class="v2-canvas-wrap"><canvas id="dish-canvas"></canvas><div class="v2-hint">🖐 Потяните, чтобы вращать · колёсико — приблизить</div></div>'+
-        '<div class="v2-modal__info"><h3>'+esc(name)+'</h3><p>Реалистичная 3D-визуализация порции. Вращайте модель пальцем или мышью.</p></div>';
+        '<div class="v2-modal__info"><h3>'+esc(name)+'</h3><p>Реалистичная 3D-визуализация порции. Вращайте модель пальцем или мышью.</p>'+ingHtml+'</div>';
       var canvas=document.getElementById('dish-canvas');
       var H=Math.max(160,Math.round(wrap.getBoundingClientRect().height));
       var renderer=new THREE.WebGLRenderer({canvas:canvas,antialias:true,alpha:true});
@@ -191,13 +193,13 @@
       scene.background=new THREE.Color(0x08111a);
       scene.fog=new THREE.Fog(0x08111a,10,24);
       var cam=new THREE.PerspectiveCamera(34,1.7,0.1,100);
-      cam.position.set(0,5.2,8.6); cam.lookAt(0,0.1,0);
+      cam.position.set(0,4.9,7.8); cam.lookAt(0,0.15,0);
       scene.add(new THREE.AmbientLight(0xffffff,.55));
       var hemi=new THREE.HemisphereLight(0x8fd3ff,0x101820,.75); scene.add(hemi);
       var key=new THREE.DirectionalLight(0xffffff,2.1); key.position.set(5,10,7); key.castShadow=true; key.shadow.mapSize.width=1024; key.shadow.mapSize.height=1024; scene.add(key);
       var fill=new THREE.DirectionalLight(0x5eead4,.95); fill.position.set(-6,4,-5); scene.add(fill);
       var rim=new THREE.DirectionalLight(0xff9ec7,.7); rim.position.set(0,6,-8); scene.add(rim);
-      var group=buildDish(name); scene.add(group);
+      var group=buildDish(name); group.scale.set(1.12,1.12,1.12); scene.add(group);
       viewer={renderer:renderer,scene:scene,camera:cam,group:group,sceneLights:[key,fill,rim],raf:null,drag:false,px:0,zoom:0};
       var rot=0.35;
       function loop(){
@@ -223,6 +225,11 @@
   /* ---------- Cooking "video" — procedural animated canvas film ---------- */
   var player={timer:null,raf:null,step:0,steps:[],playing:false,dur:4200,start:0,t:0,ctx:null,cols:[C.green,C.lime],fps60:true,progressSmooth:true};
 
+  function parseIngredients(recipe){
+    var m=String(recipe||'').match(/ингредиенты\s*:\s*(.+)/i);
+    if(!m) return [];
+    return m[1].split(',').map(function(s){return s.trim();}).filter(Boolean);
+  }
   function parseSteps(recipe){
     var raw=String(recipe||'').split(/\n+/).map(function(s){return s.trim();}).filter(Boolean);
     var steps=[];
@@ -392,9 +399,12 @@
     document.getElementById('v2-modal-title').textContent='🎬 '+name;
     document.getElementById('v2-modal-sub').textContent='Видео-инструкция · пошаговое приготовление';
     player.steps=parseSteps(recipe);player.step=0;player.playing=false;player.cols=dishColor(name);
+    player.ingredients=parseIngredients(recipe);
     var body=document.getElementById('v2-modal-body');
+    var ingHtml=player.ingredients.length?'<div class="v2-ingredients">'+player.ingredients.map(function(i){return '<span class="v2-ingredient">'+esc(i)+'</span>';}).join('')+'</div>':'';
     body.innerHTML=
       '<div class="v2-player" style="padding:0"><canvas id="film-canvas" width="520" height="360" style="width:100%;height:360px;display:block;border-radius:22px 22px 0 0"></canvas></div>'+
+      ingHtml+
       '<div class="v2-step-text" id="v2-step-text"></div>'+
       '<div class="v2-controls"><button class="v2-play" id="v2-play">▶</button>'+
       '<div class="v2-progress"><div class="v2-progress__bar" id="v2-bar"><div class="v2-progress__fill" id="v2-fill"></div></div>'+
@@ -488,7 +498,7 @@
         '<button type="button" class="v2-chip v2-chip--vid" data-act="video" aria-label="Видео-инструкция приготовления">🎬 Как готовить</button>';
       card.appendChild(acts);
       acts.querySelector('[data-act="3d"]').addEventListener('click',function(){
-        ensureModal(); open3D(name);
+        ensureModal(); open3D(name,recipe);
       });
       acts.querySelector('[data-act="video"]').addEventListener('click',function(){
         ensureModal(); openVideo(name,recipe);
