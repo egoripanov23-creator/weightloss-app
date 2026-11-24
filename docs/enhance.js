@@ -318,25 +318,46 @@
     ensureModal();
     var wrap=document.getElementById('v2-modal');wrap.classList.remove('hidden');
     document.getElementById('v2-modal-title').textContent='🖼 '+name;
-    document.getElementById('v2-modal-sub').textContent='Реалистичное фото блюда · можно покрутить';
+    document.getElementById('v2-modal-sub').textContent='Реалистичное 3D-фото блюда';
     var ingredients=parseIngredients(recipe);
     var ingHtml=ingredients.length?'<div class="v2-ingredients-title">Состав блюда</div><div class="v2-ingredients">'+ingredients.map(ingredientChip).join('')+'</div>':'';
     var body=document.getElementById('v2-modal-body');
-    body.innerHTML='<div class="v2-photo3d-wrap"><div class="v2-photo3d" id="v2-photo3d"><div class="v2-photo-loading" id="v2-photo-loading">Загружаем реалистичное фото…</div></div></div>'+
-      '<div class="v2-modal__info"><h3>'+esc(name)+'</h3><p>Фото можно покрутить мышью или пальцем. Ниже — все ингредиенты.</p>'+ingHtml+'</div>';
+    body.innerHTML='<div class="v2-canvas-wrap"><canvas id="photo-canvas"></canvas><div class="v2-hint">🖐 Потяните, чтобы покрутить блюдо · колёсико — приблизить</div></div>'+
+      '<div class="v2-modal__info"><h3>'+esc(name)+'</h3><p>Реальное фото блюда в 3D-виде: можно покрутить и рассмотреть со всех сторон.</p>'+ingHtml+'</div>';
     var meal=await fetchMealDb(dishSearchTerm(name));
     var url=meal.image || dishImageUrl(name,recipe);
-    var box=document.getElementById('v2-photo3d');
-    box.innerHTML='<img class="v2-photo3d__img" src="'+url+'" alt="'+esc(name)+'">';
-    var img=box.querySelector('img');
-    var loading=document.getElementById('v2-photo-loading');
-    img.onload=function(){ if(loading) loading.style.display='none'; };
-    img.onerror=function(){ box.innerHTML='<div class="v2-photo-loading">Не удалось загрузить фото</div>'; };
-    var rx=0, ry=0, dragging=false, px=0, py=0;
-    box.addEventListener('pointerdown',function(e){dragging=true;px=e.clientX;py=e.clientY;box.setPointerCapture(e.pointerId);});
-    box.addEventListener('pointermove',function(e){if(!dragging)return;ry+=(e.clientX-px)*0.5;rx-=(e.clientY-py)*0.5;rx=Math.max(-25,Math.min(25,rx));ry=Math.max(-35,Math.min(35,ry));px=e.clientX;py=e.clientY;box.style.transform='rotateX('+rx+'deg) rotateY('+ry+'deg)';});
-    box.addEventListener('pointerup',function(e){dragging=false;box.releasePointerCapture(e.pointerId);});
-    box.addEventListener('pointercancel',function(){dragging=false;});
+    var canvas=document.getElementById('photo-canvas');
+    var H=Math.max(180,Math.round(wrap.getBoundingClientRect().height));
+    var renderer=new THREE.WebGLRenderer({canvas:canvas,antialias:true,alpha:true});
+    renderer.setClearColor(0x08111a,1);
+    renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+    renderer.setSize(H*1.7,H,false);
+    renderer.shadowMap.enabled=true;
+    var scene=new THREE.Scene();
+    scene.background=new THREE.Color(0x08111a);
+    var cam=new THREE.PerspectiveCamera(34,1.7,0.1,100);
+    cam.position.set(0,1.2,6.2); cam.lookAt(0,0,0);
+    scene.add(new THREE.AmbientLight(0xffffff,.75));
+    var key=new THREE.DirectionalLight(0xffffff,1.9); key.position.set(4,8,6); key.castShadow=true; scene.add(key);
+    var fill=new THREE.DirectionalLight(0x5eead4,.8); fill.position.set(-5,2,-4); scene.add(fill);
+    var loader=new THREE.TextureLoader();
+    loader.crossOrigin='anonymous';
+    loader.load(url,function(tex){
+      tex.colorSpace=THREE.SRGBColorSpace;
+      var plane=new THREE.Mesh(new THREE.PlaneGeometry(4.2,2.8),new THREE.MeshStandardMaterial({map:tex,roughness:0.35,metalness:0.05,side:THREE.DoubleSide}));
+      plane.castShadow=true; scene.add(plane);
+      var shadow=new THREE.Mesh(new THREE.CircleGeometry(2.4,48),new THREE.MeshBasicMaterial({color:0x000000,transparent:true,opacity:0.3}));
+      shadow.rotation.x=-Math.PI/2; shadow.position.y=-1.6; shadow.position.z=-0.2; scene.add(shadow);
+      var rot=0;
+      function loop(){ renderer.raf=requestAnimationFrame(loop); if(!viewer.drag) rot+=0.0018; plane.rotation.y=rot; plane.position.y=Math.sin(rot*1.6)*0.03; renderer.render(scene,cam); }
+      viewer={renderer:renderer,scene:scene,camera:cam,group:plane,raf:null,drag:false,px:0,zoom:0};
+      loop();
+      canvas.addEventListener('pointerdown',function(e){viewer.drag=true;viewer.px=e.clientX;canvas.setPointerCapture(e.pointerId);});
+      canvas.addEventListener('pointermove',function(e){if(!viewer.drag)return;rot+=(e.clientX-viewer.px)*0.012;viewer.px=e.clientX;});
+      canvas.addEventListener('pointerup',function(){viewer.drag=false;});
+      canvas.addEventListener('pointercancel',function(){viewer.drag=false;});
+      canvas.addEventListener('wheel',function(e){e.preventDefault();viewer.zoom=Math.max(-1.5,Math.min(3,viewer.zoom+(e.deltaY>0?-.25:.25)));cam.position.z=6.2-viewer.zoom;},{passive:false});
+    },undefined,function(){ body.querySelector('.v2-modal__info').insertAdjacentHTML('beforeend','<p style="color:var(--v2-muted);font-size:.75rem;margin-top:8px;">Не удалось загрузить 3D-фото, показан запасной вариант.</p>'); });
   }
   function parseSteps(recipe){
     var raw=String(recipe||'').split(/\n+/).map(function(s){return s.trim();}).filter(Boolean);
