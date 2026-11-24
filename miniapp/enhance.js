@@ -295,7 +295,7 @@
     var raw=String(recipe||'').split(/\n+/).map(function(s){return s.trim();}).filter(Boolean);
     var steps=[];
     raw.forEach(function(s){
-      if(/^(⏱\s*)?(время|time|ingredients|ingredientes|tips)\s*[: —-]/i.test(s) || /^(время|ingredients|ingredientes|tips)\b/i.test(s)) return;
+      if(/^(⏱\s*)?(время|time|ingredients|ingredientes|tips|ингредиенты)\s*[: —-]/i.test(s) || /^(время|ingredients|ingredientes|tips|ингредиенты)\b/i.test(s)) return;
       if(/^[\d\.\)\s]+/i.test(s) && s.replace(/^[^\p{L}\p{N}]+/u,'').trim().startsWith('')){ /* handled below */ }
       var clean=s.replace(/^[\d\.\)\s]+/,'').replace(/^[^\p{L}\p{N}]+/u,'').trim();
       if(clean) steps.push(clean.replace(/^\d+[\.\)]\s*/,'').trim());
