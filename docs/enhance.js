@@ -296,7 +296,7 @@
     var steps=[];
     raw.forEach(function(s){
       var clean=s.replace(/^[\d\.\)\s]+/,'').replace(/^[^\p{L}\p{N}]+/u,'').trim();
-      if(/^(время|time|ingredients|ingredientes|tips|ингредиенты)\b/i.test(clean)) return;
+      if(/^(время|time|ingredients|ingredientes|tips|ингредиенты)/i.test(clean)) return;
       if(clean) steps.push(clean.replace(/^\d+[\.\)]\s*/,'').trim());
     });
     if(!steps.length) steps=['Подготовьте ингредиенты','Приготовьте блюдо','Подавайте'];
