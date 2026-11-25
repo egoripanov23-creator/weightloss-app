@@ -347,14 +347,29 @@
     if(/запек|выпек/.test(t)) return '🔥';
     return ingredientIcon(t);
   }
-  function dishImageUrl(name, recipe){
+  async function dishImageUrl(name, recipe){
     var ingredients=parseIngredients(recipe).join(', ');
     var prompt='cartoon-realistic 3D food illustration of '+name+', ingredients: '+ingredients+', clean studio background, soft lighting, appetizing, high detail, smooth rounded shapes, modern food render, no text';
+    try {
+      var res=await fetch(API_BASE+"/api/generate-image", {
+        method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({prompt:prompt})
+      });
+      var data=await res.json();
+      if(res.ok && data.url) return data.url;
+    } catch(e){}
+    // fallback
     var seed=0; for(var i=0;i<name.length;i++) seed=(seed*31+name.charCodeAt(i))>>>0;
     return 'https://image.pollinations.ai/prompt/'+encodeURIComponent(prompt)+'?width=768&height=512&model=flux&nologo=true&private=true&safe=true&enhance=true&seed='+seed;
   }
-  function stepImageUrl(name, stepText){
+  async function stepImageUrl(name, stepText){
     var prompt='close-up cooking step: '+stepText+', '+name+', food in pan, realistic kitchen, hands adding ingredient, steam, warm lighting, high detail photo, no text';
+    try {
+      var res=await fetch(API_BASE+"/api/generate-image", {
+        method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({prompt:prompt})
+      });
+      var data=await res.json();
+      if(res.ok && data.url) return data.url;
+    } catch(e){}
     var seed=0; for(var i=0;i<(name+stepText).length;i++) seed=(seed*31+(name+stepText).charCodeAt(i))>>>0;
     return 'https://image.pollinations.ai/prompt/'+encodeURIComponent(prompt)+'?width=768&height=512&model=flux&nologo=true&private=true&safe=true&enhance=true&seed='+seed;
   }
@@ -369,7 +384,7 @@
     body.innerHTML='<div class="v2-canvas-wrap"><canvas id="photo-canvas"></canvas><div class="v2-hint">🖐 Потяните, чтобы покрутить блюдо · колёсико — приблизить</div></div>'+
       '<div class="v2-modal__info"><h3>'+esc(name)+'</h3><p>Реальное фото блюда в 3D-виде: можно покрутить и рассмотреть со всех сторон.</p>'+ingHtml+'</div>';
     var meal=await fetchMealDb(dishSearchTerm(name));
-    var url=meal.image || dishImageUrl(name,recipe);
+    var url=meal.image || await dishImageUrl(name,recipe);
     var canvas=document.getElementById('photo-canvas');
     var H=Math.max(180,Math.round(wrap.getBoundingClientRect().height));
     var renderer=new THREE.WebGLRenderer({canvas:canvas,antialias:true,alpha:true});
@@ -583,7 +598,7 @@
     document.getElementById('v2-modal-sub').textContent='Пошаговый видеогайд';
     player.steps=parseSteps(recipe);player.step=0;player.playing=false;player.ingredients=parseIngredients(recipe);
     var meal=await fetchMealDb(dishSearchTerm(name));
-    var photoUrl=meal.image || dishImageUrl(name,recipe);
+    var photoUrl=meal.image || await dishImageUrl(name,recipe);
     player.photoUrl=photoUrl;
     var body=document.getElementById('v2-modal-body');
     var ingHtml=player.ingredients.length?'<div class="v2-ingredients-title">Что понадобится</div><div class="v2-ingredients">'+player.ingredients.map(ingredientChip).join('')+'</div>':'';

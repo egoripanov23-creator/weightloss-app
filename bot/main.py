@@ -8,11 +8,12 @@ import os
 import secrets
 import time
 from datetime import datetime
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 
 from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 import db
+import aiohttp
 from aiohttp import web
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
@@ -39,6 +40,8 @@ MINI_APP_URL = "https://aifoodbot.duckdns.org/"
 SITE_URL = "https://aifoodbot.duckdns.org/"
 WEBHOOK_URL = os.environ.get("WEBHOOK_URL", "").strip()
 WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET", "").strip()
+LEONARDO_API_KEY = os.environ.get("LEONARDO_API_KEY", "").strip()
+LEONARDO_API_BASE = os.environ.get("LEONARDO_API_BASE", "https://cloud.leonardo.ai/api/rest-v1").strip()
 DATA_DIR = os.environ.get("DATA_DIR", os.path.dirname(__file__))
 os.makedirs(DATA_DIR, exist_ok=True)
 TICKETS_FILE = os.path.join(DATA_DIR, "tickets.json")
@@ -837,6 +840,55 @@ async def fallback(message):
     )
 
 
+async def handle_generate_image(request):
+    """Генерация изображения блюда через Leonardo.ai (или Pollinations как фолбэк)."""
+    try:
+        data = await request.json()
+    except Exception:
+        return web.json_response({"error": "bad json"}, status=400, headers={"Access-Control-Allow-Origin": "*"})
+    prompt = (data.get("prompt") or "").strip()
+    if not prompt:
+        return web.json_response({"error": "prompt is required"}, status=400, headers={"Access-Control-Allow-Origin": "*"})
+
+    # Leonardo.ai приоритет
+    if LEONARDO_API_KEY:
+        try:
+            headers = {
+                "Authorization": f"Bearer {LEONARDO_API_KEY}",
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+            }
+            body = {
+                "prompt": prompt,
+                "modelId": "b60a243c-7c7d-4a8e-9d1c-8e5c6e2a1b3f",  # Leonardo Phoenix
+                "width": 1024,
+                "height": 768,
+                "num_images": 1,
+                "guidance_scale": 7,
+                "num_inference_steps": 20,
+            }
+            async with aiohttp.ClientSession() as session:
+                async with session.post(f"{LEONARDO_API_BASE}/generations", headers=headers, json=body, timeout=60) as resp:
+                    if resp.status == 200:
+                        result = await resp.json()
+                        gens = result.get("generations", [])
+                        if gens and gens[0].get("url"):
+                            return web.json_response({"url": gens[0]["url"], "provider": "leonardo"}, headers={"Access-Control-Allow-Origin": "*"})
+                    else:
+                        txt = await resp.text()
+                        logger.error(f"Leonardo error {resp.status}: {txt}")
+        except Exception as e:
+            logger.error(f"Leonardo generation error: {e}")
+
+    # Фолбэк на Pollinations (бесплатно, без ключа)
+    try:
+        from urllib.parse import urlencode as _urlencode
+        poll_prompt = prompt + ", modern food photography, high detail, studio lighting, appetizing"
+        poll_url = "https://image.pollinations.ai/prompt/" + quote(poll_prompt) + "?width=768&height=512&model=flux&nologo=true&private=true&safe=true&enhance=true&seed=0"
+        return web.json_response({"url": poll_url, "provider": "pollinations"}, headers={"Access-Control-Allow-Origin": "*"})
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500, headers={"Access-Control-Allow-Origin": "*"})
+
 async def handle_health(request):
     return web.json_response({"status": "ok"}, headers={"Access-Control-Allow-Origin": "*"})
 
@@ -920,6 +972,7 @@ async def start_api():
     app.router.add_post("/api/auth/login", handle_login)
     app.router.add_post("/api/tickets/create", handle_create_ticket)
     app.router.add_get("/api/tickets", handle_list_tickets)
+    app.router.add_post("/api/generate-image", handle_generate_image)
     if WEBHOOK_URL:
         app.router.add_post("/webhook", handle_telegram_webhook)
     app.router.add_options("/api/auth/register/pending", lambda r: web.Response(headers={
