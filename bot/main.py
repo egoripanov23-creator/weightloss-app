@@ -37,6 +37,8 @@ from aiogram.types import (
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
 MINI_APP_URL = "https://aifoodbot.duckdns.org/"
 SITE_URL = "https://aifoodbot.duckdns.org/"
+WEBHOOK_URL = os.environ.get("WEBHOOK_URL", "").strip()
+WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET", "").strip()
 DATA_DIR = os.environ.get("DATA_DIR", os.path.dirname(__file__))
 os.makedirs(DATA_DIR, exist_ok=True)
 TICKETS_FILE = os.path.join(DATA_DIR, "tickets.json")
@@ -897,6 +899,20 @@ async def handle_list_tickets(request):
     tickets = [t for t in load_tickets() if t.get("login") == session_data["login"]]
     return web.json_response({"tickets": tickets}, headers={"Access-Control-Allow-Origin": "*"})
 
+async def handle_telegram_webhook(request):
+    if WEBHOOK_SECRET and request.headers.get("X-Telegram-Bot-Api-Secret-Token") != WEBHOOK_SECRET:
+        return web.Response(status=403, text="forbidden")
+    try:
+        data = await request.json()
+    except Exception:
+        return web.Response(status=400, text="bad json")
+    try:
+        await dp.feed_webhook_update(bot, data, secret_token=WEBHOOK_SECRET or None)
+    except Exception as e:
+        logger.error(f"Webhook feed error: {e}")
+        return web.Response(status=500, text="error")
+    return web.Response(text="ok")
+
 async def start_api():
     app = web.Application()
     app.router.add_get("/api/health", handle_health)
@@ -904,6 +920,8 @@ async def start_api():
     app.router.add_post("/api/auth/login", handle_login)
     app.router.add_post("/api/tickets/create", handle_create_ticket)
     app.router.add_get("/api/tickets", handle_list_tickets)
+    if WEBHOOK_URL:
+        app.router.add_post("/webhook", handle_telegram_webhook)
     app.router.add_options("/api/auth/register/pending", lambda r: web.Response(headers={
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -930,8 +948,13 @@ async def main():
     await bot.set_chat_menu_button(
         menu_button=MenuButtonWebApp(text="Открыть", web_app=WebAppInfo(url=MINI_APP_URL)),
     )
-    logger.info("Бот запущен")
-    await dp.start_polling(bot)
+    if WEBHOOK_URL:
+        await bot.set_webhook(WEBHOOK_URL, secret_token=WEBHOOK_SECRET or None)
+        logger.info("Webhook set: %s", WEBHOOK_URL)
+        await asyncio.Event().wait()
+    else:
+        logger.info("Бот запущен")
+        await dp.start_polling(bot)
 
 
 if __name__ == "__main__":
