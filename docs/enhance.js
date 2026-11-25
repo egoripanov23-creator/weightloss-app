@@ -351,12 +351,12 @@
     var ingredients=parseIngredients(recipe).join(', ');
     var prompt='cartoon-realistic 3D food illustration of '+name+', ingredients: '+ingredients+', clean studio background, soft lighting, appetizing, high detail, smooth rounded shapes, modern food render, no text';
     var seed=0; for(var i=0;i<name.length;i++) seed=(seed*31+name.charCodeAt(i))>>>0;
-    return 'https://image.pollinations.ai/prompt/'+encodeURIComponent(prompt)+'?width=768&height=512&model=flux&nologo=true&private=true&safe=true&enhance=true&seed='+seed;
+    return 'https://image.pollinations.ai/prompt/'+encodeURIComponent(prompt)+'?width=1024&height=576&model=flux&nologo=true&private=true&safe=true&enhance=true&seed='+seed;
   }
   function stepImageUrl(name, stepText){
     var prompt='close-up cooking step: '+stepText+', '+name+', food in pan, realistic kitchen, hands adding ingredient, steam, warm lighting, high detail photo, no text';
     var seed=0; for(var i=0;i<(name+stepText).length;i++) seed=(seed*31+(name+stepText).charCodeAt(i))>>>0;
-    return 'https://image.pollinations.ai/prompt/'+encodeURIComponent(prompt)+'?width=768&height=512&model=flux&nologo=true&private=true&safe=true&enhance=true&seed='+seed;
+    return 'https://image.pollinations.ai/prompt/'+encodeURIComponent(prompt)+'?width=1024&height=576&model=flux&nologo=true&private=true&safe=true&enhance=true&seed='+seed;
   }
   async function openPhoto(name, recipe){
     ensureModal();
