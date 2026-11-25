@@ -585,11 +585,10 @@
     var meal=await fetchMealDb(dishSearchTerm(name));
     var body=document.getElementById('v2-modal-body');
     var ingHtml=player.ingredients.length?'<div class="v2-ingredients-title">Что понадобится</div><div class="v2-ingredients">'+player.ingredients.map(ingredientChip).join('')+'</div>':'';
-    var videoId=meal.video?meal.video.split('/embed/')[1]||'':'';
-    var thumb=videoId?'https://img.youtube.com/vi/'+videoId+'/hqdefault.jpg':(meal.image||dishImageUrl(name,recipe));
-    var stepUrl=stepImageUrl(name, player.steps[0]||name);
+    var photoUrl=meal.image || dishImageUrl(name,recipe);
+    player.photoUrl=photoUrl;
     body.innerHTML=
-      '<div class="v2-photo-wrap v2-photo-wrap--video"><img class="v2-photo v2-photo--kenburns" id="v2-step-image" src="'+stepUrl+'" alt="'+esc(name)+'"><div class="v2-photo-loading" id="v2-photo-loading">Генерируем шаг приготовления…</div><div class="v2-video-overlay"></div></div>'+
+      '<div class="v2-photo-wrap v2-photo-wrap--video"><img class="v2-photo v2-photo--kenburns" id="v2-step-image" src="'+photoUrl+'" alt="'+esc(name)+'"><div class="v2-photo-loading" id="v2-photo-loading">Загружаем фото блюда…</div><div class="v2-video-overlay"></div></div>'+
       ingHtml+
       '<div class="v2-step-card" id="v2-step-card"><span class="v2-step-card__icon" id="v2-step-icon">🍳</span><span class="v2-step-card__text" id="v2-step-text"></span></div>'+
       '<div class="v2-controls"><button class="v2-play" id="v2-play">▶</button>'+
@@ -613,7 +612,7 @@
     player.step=i;player.start=0;player.t=0;
     var t=document.getElementById('v2-step-text');if(t)t.textContent=player.steps[i]||'';
     var icon=document.getElementById('v2-step-icon');if(icon)icon.textContent=stepIcon(player.steps[i]||'');
-    var img=document.getElementById('v2-step-image');if(img){img.src=stepImageUrl(player._name||'',player.steps[i]||'');}
+    var img=document.getElementById('v2-step-image');if(img && player.photoUrl){img.src=player.photoUrl;}
     var n=document.getElementById('v2-step-now');if(n)n.textContent='Шаг '+(i+1);
     var f=document.getElementById('v2-fill');if(f)f.style.width=((i+1)/player.steps.length*100)+'%';
     var card=document.getElementById('v2-step-card');if(card){card.classList.remove('v2-step-card--pop');void card.offsetWidth;card.classList.add('v2-step-card--pop');}
