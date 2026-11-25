@@ -577,27 +577,27 @@
     player.raf=requestAnimationFrame(filmLoop);
   }
 
-  function openVideo(name,recipe){
+  async function openVideo(name,recipe){
     var wrap=document.getElementById('v2-modal');wrap.classList.remove('hidden');
     document.getElementById('v2-modal-title').textContent='🎬 '+name;
-    document.getElementById('v2-modal-sub').textContent='Видеогайд по приготовлению';
-    player.steps=parseSteps(recipe);player.step=0;player.playing=false;player.ingredients=parseIngredients(recipe);player.cols=dishColor(name);
+    document.getElementById('v2-modal-sub').textContent='Пошаговый видеогайд';
+    player.steps=parseSteps(recipe);player.step=0;player.playing=false;player.ingredients=parseIngredients(recipe);
+    var meal=await fetchMealDb(dishSearchTerm(name));
+    var photoUrl=meal.image || dishImageUrl(name,recipe);
+    player.photoUrl=photoUrl;
     var body=document.getElementById('v2-modal-body');
     var ingHtml=player.ingredients.length?'<div class="v2-ingredients-title">Что понадобится</div><div class="v2-ingredients">'+player.ingredients.map(ingredientChip).join('')+'</div>':'';
     body.innerHTML=
-      '<div class="v2-player" style="padding:0"><canvas id="film-canvas" width="520" height="360" style="width:100%;height:360px;display:block;border-radius:22px 22px 0 0"></canvas></div>'+
+      '<div class="v2-photo-wrap v2-photo-wrap--video"><img class="v2-photo v2-photo--kenburns" id="v2-step-image" src="'+photoUrl+'" alt="'+esc(name)+'"><div class="v2-photo-loading" id="v2-photo-loading">Загружаем фото блюда…</div><div class="v2-video-overlay"></div></div>'+
       ingHtml+
       '<div class="v2-step-card" id="v2-step-card"><span class="v2-step-card__icon" id="v2-step-icon">🍳</span><span class="v2-step-card__text" id="v2-step-text"></span></div>'+
       '<div class="v2-controls"><button class="v2-play" id="v2-play">▶</button>'+
       '<div class="v2-progress"><div class="v2-progress__bar" id="v2-bar"><div class="v2-progress__fill" id="v2-fill"></div></div>'+
       '<div class="v2-progress__meta"><span id="v2-step-now">Шаг 1</span><span id="v2-step-count">из '+player.steps.length+'</span></div></div></div>';
-    var c=document.getElementById('film-canvas');player.ctx=c.getContext('2d');
-    var W=Math.min(520,Math.max(220,Math.round(c.clientWidth||520)));
-    var H=Math.min(360,Math.max(220,Math.round(c.clientHeight||360)));
-    player.canvasW=W;player.canvasH=H;
-    c.width=Math.round(W*(window.devicePixelRatio||1));c.height=Math.round(H*(window.devicePixelRatio||1));
-    player.ctx.scale(window.devicePixelRatio||1,window.devicePixelRatio||1);
-    drawKitchen(player.ctx,W,H,0,0,player.steps.length,player.cols,stepIcon(player.steps[0]||''));
+    var img=body.querySelector('#v2-step-image');
+    var loading=body.querySelector('#v2-photo-loading');
+    img.onload=function(){ if(loading) loading.style.display='none'; };
+    img.onerror=function(){ if(loading) loading.textContent='Не удалось загрузить фото'; };
     showStep(0);
     document.getElementById('v2-play').addEventListener('click',togglePlay);
     document.getElementById('v2-bar').addEventListener('click',function(e){
@@ -612,8 +612,7 @@
     player.step=i;player.start=0;player.t=0;
     var t=document.getElementById('v2-step-text');if(t)t.textContent=player.steps[i]||'';
     var icon=document.getElementById('v2-step-icon');if(icon)icon.textContent=stepIcon(player.steps[i]||'');
-    var c=document.getElementById('film-canvas');
-    if(c&&player.ctx)drawKitchen(player.ctx,player.canvasW||520,player.canvasH||360,0,player.step,player.steps.length,player.cols,stepIcon(player.steps[player.step]||''));
+    var img=document.getElementById('v2-step-image');if(img && player.photoUrl){img.src=player.photoUrl;}
     var n=document.getElementById('v2-step-now');if(n)n.textContent='Шаг '+(i+1);
     var f=document.getElementById('v2-fill');if(f)f.style.width=((i+1)/player.steps.length*100)+'%';
     var card=document.getElementById('v2-step-card');if(card){card.classList.remove('v2-step-card--pop');void card.offsetWidth;card.classList.add('v2-step-card--pop');}
