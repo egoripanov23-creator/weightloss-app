@@ -192,92 +192,24 @@
     return g;
   }
 
-  function open3D(name,recipe){
-    try{
-      closeViewer();
-      var wrap=document.getElementById('v2-modal');
-      wrap.classList.remove('hidden');
-      document.getElementById('v2-modal-title').textContent='🥘 '+name;
-      document.getElementById('v2-modal-sub').textContent='3D-модель блюда — покрутите, чтобы рассмотреть со всех сторон';
-      var body=document.getElementById('v2-modal-body');
-      var ingredients=parseIngredients(recipe);
-      var ingHtml=ingredients.length?'<div class="v2-ingredients-title">Состав блюда</div><div class="v2-ingredients">'+ingredients.map(ingredientChip).join('')+'</div>':'';
-      body.innerHTML='<div class="v2-canvas-wrap"><canvas id="dish-canvas"></canvas><div class="v2-hint">🖐 Потяните, чтобы вращать · колёсико — приблизить</div></div>'+
-        '<div class="v2-modal__info"><h3>'+esc(name)+'</h3><p>3D-визуализация порции. Ниже — все ингредиенты, чтобы было понятно, что входит в блюдо.</p>'+ingHtml+'</div>';
-      var canvas=document.getElementById('dish-canvas');
-      var H=Math.max(220,Math.round(wrap.getBoundingClientRect().height));
-      var renderer=new THREE.WebGLRenderer({canvas:canvas,antialias:true,alpha:true});
-      renderer.setClearColor('#070b14',1);
-      renderer.setPixelRatio(Math.min(devicePixelRatio,2));
-      renderer.setSize(H*1.6,H,false);
-      renderer.shadowMap.enabled=true;
-      renderer.shadowMap.type=THREE.PCFSoftShadowMap;
-      renderer.toneMapping=THREE.ACESFilmicToneMapping;
-      renderer.toneMappingExposure=1.08;
-      var scene=new THREE.Scene();
-      scene.background=new THREE.Color(0x08111a);
-      scene.fog=new THREE.Fog(0x08111a,10,24);
-      var cam=new THREE.PerspectiveCamera(34,1.7,0.1,100);
-      cam.position.set(0,4.2,6.8); cam.lookAt(0,0.25,0);
-      scene.add(new THREE.AmbientLight(0xffffff,.55));
-      var hemi=new THREE.HemisphereLight(0x8fd3ff,0x101820,.75); scene.add(hemi);
-      var key=new THREE.DirectionalLight(0xffffff,2.1); key.position.set(5,10,7); key.castShadow=true; key.shadow.mapSize.width=1024; key.shadow.mapSize.height=1024; scene.add(key);
-      var fill=new THREE.DirectionalLight(0x5eead4,.95); fill.position.set(-6,4,-5); scene.add(fill);
-      var rim=new THREE.DirectionalLight(0xff9ec7,.7); rim.position.set(0,6,-8); scene.add(rim);
-      // realistic photo wrapped on a 3D bowl (rotatable)
-      var plate=new THREE.Mesh(new THREE.CylinderGeometry(2.78,2.42,0.22,64),new THREE.MeshStandardMaterial({color:0xf7fafc,roughness:0.18,metalness:0.08}));
-      plate.position.y=-0.2; plate.receiveShadow=true; scene.add(plate);
-      var rim=new THREE.Mesh(new THREE.TorusGeometry(2.62,0.13,18,72),new THREE.MeshStandardMaterial({color:0xe8f1f8,roughness:0.22,metalness:0.12}));
-      rim.rotation.x=Math.PI/2; rim.position.y=-0.09; rim.castShadow=true; scene.add(rim);
-      var shadow=new THREE.Mesh(new THREE.CircleGeometry(3.25,64),new THREE.MeshBasicMaterial({color:0x000000,transparent:true,opacity:0.28}));
-      shadow.rotation.x=-Math.PI/2; shadow.position.y=-0.36; scene.add(shadow);
-      var group=new THREE.Group(); scene.add(group);
-      var img=new Image();
-      img.src=dishImageUrl(name,recipe);
-      img.onload=function(){
-        var tex=new THREE.Texture(img);
-        if(THREE.sRGBEncoding) tex.encoding=THREE.sRGBEncoding;
-        tex.needsUpdate=true;
-        var bowl=new THREE.Mesh(new THREE.SphereGeometry(1.95,64,32,0,Math.PI*2,0,Math.PI/2),new THREE.MeshStandardMaterial({map:tex,roughness:0.32,metalness:0.03}));
-        bowl.scale.set(1,0.72,1); bowl.position.y=0.08; bowl.castShadow=true; bowl.receiveShadow=true; group.add(bowl);
-        var glaze=new THREE.Mesh(new THREE.SphereGeometry(1.5,32,20),new THREE.MeshStandardMaterial({color:0xffffff,transparent:true,opacity:0.12,roughness:0.1}));
-        glaze.scale.set(1,0.45,1); glaze.position.y=0.28; group.add(glaze);
-      };
-      img.onerror=function(){ var fallback=buildDish(name); group.add(fallback); };
-      texLoader.crossOrigin='anonymous';
-      texLoader.load(dishImageUrl(name,recipe),function(tex){
-        if(THREE.sRGBEncoding) tex.encoding=THREE.sRGBEncoding;
-        var bowl=new THREE.Mesh(new THREE.SphereGeometry(1.95,64,32,0,Math.PI*2,0,Math.PI/2),new THREE.MeshStandardMaterial({map:tex,roughness:0.32,metalness:0.03}));
-        bowl.scale.set(1,0.72,1); bowl.position.y=0.08; bowl.castShadow=true; bowl.receiveShadow=true; group.add(bowl);
-        var glaze=new THREE.Mesh(new THREE.SphereGeometry(1.5,32,20),new THREE.MeshStandardMaterial({color:0xffffff,transparent:true,opacity:0.12,roughness:0.1}));
-        glaze.scale.set(1,0.45,1); glaze.position.y=0.28; group.add(glaze);
-      },undefined,function(){
-        var fallback=buildDish(name); group.add(fallback);
-      });
-      viewer={renderer:renderer,scene:scene,camera:cam,group:group,sceneLights:[key,fill,rim],raf:null,drag:false,px:0,zoom:0};
-      var rot=0.35;
-      function loop(){
-        viewer.raf=requestAnimationFrame(loop);
-        if(!viewer.drag)rot+=0.0022;
-        group.rotation.y=rot;
-        group.position.y=Math.sin(rot*1.7)*0.045;
-        renderer.render(scene,cam);
-      }
-      loop();
-      loop();
-      canvas.addEventListener('pointerdown',function(e){viewer.drag=true;viewer.px=e.clientX;canvas.setPointerCapture(e.pointerId);e.preventDefault();});
-      canvas.addEventListener('pointermove',function(e){if(!viewer.drag)return;rot+=(e.clientX-viewer.px)*0.012;viewer.px=e.clientX;e.preventDefault();});
-      canvas.addEventListener('pointerup',function(e){viewer.drag=false;canvas.releasePointerCapture(e.pointerId);});
-      canvas.addEventListener('pointercancel',function(){viewer.drag=false;});
-      canvas.addEventListener('wheel',function(e){e.preventDefault();viewer.zoom=Math.max(-1.2,Math.min(4,viewer.zoom+(e.deltaY>0?-.3:.3)));cam.position.set(0,3+viewer.zoom*.85,5.3+viewer.zoom*.75);cam.updateProjectionMatrix();},{passive:false});
-      window.addEventListener('resize',function(){if(!viewer.renderer)return;var h=Math.max(160,Math.round(wrap.getBoundingClientRect().height));viewer.renderer.setSize(h*1.7,h,false);viewer.camera.aspect=1.7;viewer.camera.updateProjectionMatrix();});
-    }catch(e){
-      var body=document.getElementById('v2-modal-body');
-      if(body)body.innerHTML='<div class="v2-modal__info"><h3>'+esc(name)+'</h3><p>3D просмотр недоступен</p></div>';
-    }
+    function open3D(name,recipe){
+    ensureModal();
+    var wrap=document.getElementById('v2-modal');wrap.classList.remove('hidden');
+    document.getElementById('v2-modal-title').textContent='🖼 '+name;
+    document.getElementById('v2-modal-sub').textContent='Реалистичное фото блюда';
+    var ingredients=parseIngredients(recipe);
+    var ingHtml=ingredients.length?'<div class="v2-ingredients-title">Состав блюда</div><div class="v2-ingredients">'+ingredients.map(ingredientChip).join('')+'</div>':'';
+    var body=document.getElementById('v2-modal-body');
+    var url=dishImageUrl(name,recipe);
+    body.innerHTML='<div class="v2-photo-wrap"><img class="v2-photo v2-photo--kenburns" src="'+url+'" alt="'+esc(name)+'"><div class="v2-photo-loading" id="v2-photo-loading">Загружаем фото блюда…</div></div>'+
+      '<div class="v2-modal__info"><h3>'+esc(name)+'</h3><p>Реалистичное фото блюда. Ниже — все ингредиенты.</p>'+ingHtml+'</div>';
+    var img=body.querySelector('.v2-photo');
+    var loading=document.getElementById('v2-photo-loading');
+    img.onload=function(){ if(loading) loading.style.display='none'; };
+    img.onerror=function(){ if(loading) loading.textContent='Не удалось загрузить фото'; };
   }
 
-  /* ---------- Cooking "video" — procedural animated canvas film ---------- */
+/* ---------- Cooking "video" — procedural animated canvas film ---------- */
   var player={timer:null,raf:null,step:0,steps:[],playing:false,dur:7000,start:0,t:0,ctx:null,cols:[C.green,C.lime],fps60:true,progressSmooth:true};
 
   function ingredientIcon(text){
