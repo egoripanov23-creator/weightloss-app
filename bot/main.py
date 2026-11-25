@@ -842,6 +842,12 @@ async def fallback(message):
 
 async def handle_generate_image(request):
     """Генерация изображения блюда через Leonardo.ai (или Pollinations как фолбэк)."""
+    if request.method == "OPTIONS":
+        return web.Response(headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type",
+        })
     try:
         data = await request.json()
     except Exception:
@@ -973,6 +979,11 @@ async def start_api():
     app.router.add_post("/api/tickets/create", handle_create_ticket)
     app.router.add_get("/api/tickets", handle_list_tickets)
     app.router.add_post("/api/generate-image", handle_generate_image)
+    app.router.add_options("/api/generate-image", lambda r: web.Response(headers={
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type",
+    }))
     if WEBHOOK_URL:
         app.router.add_post("/webhook", handle_telegram_webhook)
     app.router.add_options("/api/auth/register/pending", lambda r: web.Response(headers={
