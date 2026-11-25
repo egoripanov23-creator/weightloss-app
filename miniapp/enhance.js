@@ -232,7 +232,18 @@
       var shadow=new THREE.Mesh(new THREE.CircleGeometry(3.25,64),new THREE.MeshBasicMaterial({color:0x000000,transparent:true,opacity:0.28}));
       shadow.rotation.x=-Math.PI/2; shadow.position.y=-0.36; scene.add(shadow);
       var group=new THREE.Group(); scene.add(group);
-      var texLoader=new THREE.TextureLoader();
+      var img=new Image();
+      img.src=dishImageUrl(name,recipe);
+      img.onload=function(){
+        var tex=new THREE.Texture(img);
+        if(THREE.sRGBEncoding) tex.encoding=THREE.sRGBEncoding;
+        tex.needsUpdate=true;
+        var bowl=new THREE.Mesh(new THREE.SphereGeometry(1.95,64,32,0,Math.PI*2,0,Math.PI/2),new THREE.MeshStandardMaterial({map:tex,roughness:0.32,metalness:0.03}));
+        bowl.scale.set(1,0.72,1); bowl.position.y=0.08; bowl.castShadow=true; bowl.receiveShadow=true; group.add(bowl);
+        var glaze=new THREE.Mesh(new THREE.SphereGeometry(1.5,32,20),new THREE.MeshStandardMaterial({color:0xffffff,transparent:true,opacity:0.12,roughness:0.1}));
+        glaze.scale.set(1,0.45,1); glaze.position.y=0.28; group.add(glaze);
+      };
+      img.onerror=function(){ var fallback=buildDish(name); group.add(fallback); };
       texLoader.crossOrigin='anonymous';
       texLoader.load(dishImageUrl(name,recipe),function(tex){
         if(THREE.sRGBEncoding) tex.encoding=THREE.sRGBEncoding;
